@@ -421,6 +421,26 @@
         </div>
     </dialog>
 
+    <!-- 【新增】清空所有數量確認 Modal -->
+    <dialog id="clearAllConfirmModal" class="p-0 rounded-2xl shadow-2xl backdrop:bg-black backdrop:bg-opacity-50 w-11/12 max-w-sm m-auto dark:bg-gray-800">
+        <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl text-center">
+            <div class="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto mb-4 text-red-500 dark:text-red-400 text-2xl">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <h3 class="font-bold text-xl mb-2 text-gray-900 dark:text-white">確定要歸零所有數量嗎？</h3>
+            <p class="text-red-500 dark:text-red-400 text-sm mb-4 font-medium">警告：將清空全部前台、倉庫數量與歷史紀錄，此動作無法復原！</p>
+            <form id="clearAllConfirmForm" class="space-y-4">
+                <div>
+                    <input type="text" id="clearAllConfirmInput" required placeholder="請輸入: 清空" class="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-red-500 focus:outline-none dark:bg-gray-700 dark:text-white text-center text-lg tracking-widest font-bold">
+                </div>
+                <div class="flex gap-3">
+                    <button type="button" id="cancelClearAllBtn" class="flex-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 py-2 rounded-lg font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">取消</button>
+                    <button type="submit" id="confirmClearAllBtn" disabled class="flex-1 bg-red-600 text-white py-2 rounded-lg font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all">確定歸零</button>
+                </div>
+            </form>
+        </div>
+    </dialog>
+
     <!-- 新增/編輯品項 Modal -->
     <dialog id="itemFormModal" class="p-0 rounded-2xl shadow-2xl backdrop:bg-black backdrop:bg-opacity-50 w-11/12 max-w-md m-auto dark:bg-gray-800">
         <div class="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden">
@@ -475,7 +495,7 @@
                 <h3 class="font-bold text-lg"><i class="fa-solid fa-clock-rotate-left"></i> 盤點紀錄追蹤</h3>
                 <div class="flex items-center gap-4">
                     <button id="clearHistoryBtn" onclick="window.appClearCurrentHistory()" class="text-sm bg-red-600 hover:bg-red-700 px-3 py-1 rounded transition-colors hidden shadow-sm border border-red-800">
-                        <i class="fa-solid fa-trash-can mr-1"></i> 清空
+                        <i class="fa-solid fa-trash-can mr-1"></i> 歸零
                     </button>
                     <button id="closeHistoryModalBtn" class="text-white hover:text-gray-300 transition-colors">
                         <i class="fa-solid fa-xmark text-xl"></i>
@@ -624,6 +644,12 @@
             deleteSubCategoryConfirmInput: document.getElementById('deleteSubCategoryConfirmInput'),
             cancelDeleteSubCategoryBtn: document.getElementById('cancelDeleteSubCategoryBtn'),
             confirmDeleteSubCategoryBtn: document.getElementById('confirmDeleteSubCategoryBtn'),
+
+            clearAllConfirmModal: document.getElementById('clearAllConfirmModal'),
+            clearAllConfirmForm: document.getElementById('clearAllConfirmForm'),
+            clearAllConfirmInput: document.getElementById('clearAllConfirmInput'),
+            cancelClearAllBtn: document.getElementById('cancelClearAllBtn'),
+            confirmClearAllBtn: document.getElementById('confirmClearAllBtn'),
 
             itemFormModal: document.getElementById('itemFormModal'),
             itemForm: document.getElementById('itemForm'),
@@ -965,7 +991,23 @@
                 renderItems();
                 showToast('整個次分類及其品項已刪除');
             });
-
+            
+            // 歸零所有數量邏輯
+            DOM.clearAllConfirmInput.addEventListener('input', (e) => {
+                DOM.confirmClearAllBtn.disabled = e.target.value !== '清空';
+            });
+            DOM.cancelClearAllBtn.addEventListener('click', () => DOM.clearAllConfirmModal.close());
+            DOM.clearAllConfirmForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                if (DOM.clearAllConfirmInput.value !== '清空') return;
+                
+                state.history = [];
+                state.counts = {}; // 清空所有數量
+                CloudDB.save();
+                showToast('所有盤點數量與歷史紀錄已成功歸零');
+                DOM.clearAllConfirmModal.close();
+                renderItems();
+            });
 
             DOM.fabAddBtn.addEventListener('click', () => {
                 DOM.itemForm.reset();
@@ -1268,13 +1310,9 @@
 
         // 【新增功能】一鍵清空所有盤點數量與歷史紀錄
         window.appClearAllHistory = function() {
-            if (confirm('⚠️ 警告：確定要清空「全部品項」的盤點數量與歷史紀錄嗎？\n(注意：此動作將把所有前台與倉庫數量歸零，無法復原)')) {
-                state.history = [];
-                state.counts = {}; // 清空所有數量
-                CloudDB.save();
-                showToast('所有盤點數量與歷史紀錄已成功歸零');
-                renderItems();
-            }
+            DOM.clearAllConfirmInput.value = '';
+            DOM.confirmClearAllBtn.disabled = true;
+            DOM.clearAllConfirmModal.showModal();
         };
 
         window.appClearCurrentHistory = function() {
@@ -1675,8 +1713,8 @@
 
                 const sumBadges = `
                     <div class="flex items-center gap-1 sm:gap-2 mr-1">
-                        <span class="text-[10px] sm:text-xs font-bold text-blue-600 bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded shadow-sm">前台: ${frontSum}</span>
-                        <span class="text-[10px] sm:text-xs font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 px-1.5 py-0.5 rounded shadow-sm">倉庫: ${warehouseSum}</span>
+                        <span class="text-[10px] sm:text-xs font-bold text-blue-600 bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded shadow-sm"><span class="hidden sm:inline">前台: </span>${frontSum}</span>
+                        <span class="text-[10px] sm:text-xs font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 px-1.5 py-0.5 rounded shadow-sm"><span class="hidden sm:inline">倉庫: </span>${warehouseSum}</span>
                     </div>
                 `;
                 
@@ -1687,9 +1725,9 @@
                             <i class="fa-solid ${icon} text-${currentSubCat ? 'indigo-500' : 'gray-400'}"></i>
                             <h4 class="text-xl sm:text-2xl font-bold text-${currentSubCat ? 'indigo-700 dark:text-indigo-400' : 'gray-500 dark:text-gray-400'}">${subCatName}</h4>
                         </div>
-                        <div class="flex items-center">
+                        <div class="flex items-center shrink-0">
                             ${sumBadges}
-                            <span class="text-sm font-bold text-${currentSubCat ? 'indigo-400 bg-indigo-100 dark:bg-indigo-900/50' : 'gray-400 bg-gray-100 dark:bg-gray-800'} px-2 py-0.5 rounded-full ml-1">${group.items.length} 項</span>
+                            <span class="text-sm font-bold text-${currentSubCat ? 'indigo-400 bg-indigo-100 dark:bg-indigo-900/50' : 'gray-400 bg-gray-100 dark:bg-gray-800'} px-2 py-0.5 rounded-full ml-1 shrink-0">${group.items.length} 項</span>
                         </div>
                     </div>`;
 
@@ -1769,27 +1807,26 @@
                 const headerRow = `
                     <tr class="group-header cursor-pointer select-none hover:opacity-80 transition-opacity ${headerColorClass}" data-group="${subCatName}" draggable="true" ondragstart="window.appGroupDragStart(event, '${subCatName}')" ondragend="window.appGroupDragEnd(event)" ondragover="window.appGroupDragOver(event)" ondragenter="window.appGroupDragEnter(event)" ondragleave="window.appGroupDragLeave(event)" ondrop="window.appGroupDrop(event, '${subCatName}')" onclick="window.appToggleGroup('${subCatName}')">
                         <td colspan="${colspan}" class="px-6 py-3 text-base sm:text-xl font-bold border-y ${headerColorClass}">
-                            <div class="flex items-center gap-2">
+                            <div class="flex items-center gap-2 w-full">
                                 <i class="fa-solid fa-grip-vertical text-indigo-300 dark:text-indigo-600 mr-2 cursor-move hover:text-indigo-500 transition-colors" title="拖曳排序整個次分類" onclick="event.stopPropagation()"></i>
-                                <i class="fa-solid fa-chevron-${isCollapsed ? 'right' : 'down'} w-4 text-center transition-transform"></i>
-                                <i class="fa-solid ${icon}"></i> 
-                                <span>${subCatName}</span>
+                                <i class="fa-solid fa-chevron-${isCollapsed ? 'right' : 'down'} w-4 text-center transition-transform shrink-0"></i>
+                                <i class="fa-solid ${icon} shrink-0"></i> 
+                                <span class="truncate">${subCatName}</span>
                                 ${currentSubCat && state.role === 'admin' ? `
-                                <div class="ml-2 flex items-center gap-1">
+                                <div class="ml-2 flex items-center gap-1 shrink-0">
                                     <button onclick="event.stopPropagation(); window.appEditSubCategory('${subCatName}')" class="text-indigo-500 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors p-1.5 bg-white/50 dark:bg-black/20 rounded-md" title="編輯次分類"><i class="fa-solid fa-pen text-sm"></i></button>
                                     <button onclick="event.stopPropagation(); window.appCopySubCategory('${subCatName}')" class="text-emerald-500 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors p-1.5 bg-white/50 dark:bg-black/20 rounded-md" title="複製整個次分類"><i class="fa-solid fa-copy text-sm"></i></button>
                                     <button onclick="event.stopPropagation(); window.appDeleteSubCategory('${subCatName}')" class="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors p-1.5 bg-white/50 dark:bg-black/20 rounded-md" title="刪除整個次分類"><i class="fa-solid fa-trash-can text-sm"></i></button>
                                 </div>
                                 ` : ''}
                                 
-                                <div class="ml-4 flex items-center gap-2">
-                                    <span class="text-xs font-bold text-blue-600 bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 px-2 py-0.5 rounded shadow-sm">前台: ${frontSum}</span>
-                                    <span class="text-xs font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 px-2 py-0.5 rounded shadow-sm">倉庫: ${warehouseSum}</span>
-                                </div>
-
-                                <span class="ml-2 text-sm font-normal opacity-70 bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded-full">${group.items.length} 項</span>
+                                <span class="ml-2 text-sm font-normal opacity-70 bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded-full shrink-0">${group.items.length} 項</span>
                                 
-                                ${state.showCosts ? `<span class="ml-auto text-sm font-bold bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-400 px-3 py-0.5 rounded-full shadow-inner">群組小計: $${groupTotalCost}</span>` : ''}
+                                <div class="ml-auto flex items-center gap-2 shrink-0">
+                                    <span class="text-xs font-bold text-blue-600 bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 px-2 py-0.5 rounded shadow-sm"><span class="hidden sm:inline">前台: </span>${frontSum}</span>
+                                    <span class="text-xs font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 px-2 py-0.5 rounded shadow-sm"><span class="hidden sm:inline">倉庫: </span>${warehouseSum}</span>
+                                    ${state.showCosts ? `<span class="text-sm font-bold bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-400 px-3 py-0.5 rounded-full shadow-inner">群組小計: $${groupTotalCost}</span>` : ''}
+                                </div>
                             </div>
                         </td>
                     </tr>
