@@ -997,6 +997,23 @@
         }
 
         // ================= UI 渲染函數 =================
+        function groupItemsBySubCategory(items) {
+            const groups = [];
+            const groupMap = new Map();
+
+            items.forEach(item => {
+                const subCat = item.subCategory || '';
+                if (!groupMap.has(subCat)) {
+                    const newGroup = { subCategory: subCat, items: [] };
+                    groups.push(newGroup);
+                    groupMap.set(subCat, newGroup);
+                }
+                groupMap.get(subCat).items.push(item);
+            });
+
+            return groups;
+        }
+
         function renderCategoryManager() {
             DOM.categoryListContainer.innerHTML = state.categories.map(cat => `
                 <li class="flex justify-between items-center bg-gray-50 dark:bg-gray-700/50 px-3 py-2 rounded border border-gray-100 dark:border-gray-600">
@@ -1058,101 +1075,111 @@
         }
 
         function renderStaffGrid(items) {
-            let lastSubCat = null;
-            
-            DOM.itemsGrid.innerHTML = items.map(item => {
-                const hasFrontCount = state.counts.hasOwnProperty(`${item.id}_front`);
-                const hasWarehouseCount = state.counts.hasOwnProperty(`${item.id}_warehouse`);
-                const frontQty = hasFrontCount ? state.counts[`${item.id}_front`] : 0;
-                const warehouseQty = hasWarehouseCount ? state.counts[`${item.id}_warehouse`] : 0;
-                const nameColor = item.color || (state.isDarkMode ? '#ffffff' : '#1f2937');
+            const groups = groupItemsBySubCategory(items);
 
+            DOM.itemsGrid.innerHTML = groups.map(group => {
+                const currentSubCat = group.subCategory;
                 let headerHtml = '';
-                const currentSubCat = item.subCategory || '';
                 
-                // 次分類群組標題判斷
-                if (currentSubCat !== lastSubCat) {
-                    if (currentSubCat) {
-                        headerHtml = `
-                        <div class="mt-4 mb-2 pb-1 border-b-2 border-indigo-200 dark:border-indigo-800/60 flex items-center gap-2 px-1">
-                            <i class="fa-solid fa-layer-group text-indigo-500"></i>
-                            <h4 class="text-lg font-bold text-indigo-700 dark:text-indigo-400">${currentSubCat}</h4>
-                        </div>`;
-                    } else if (lastSubCat !== null) {
-                        // 如果上一個有次分類，但目前這個沒有，顯示「其他」區隔
-                        headerHtml = `
-                        <div class="mt-4 mb-2 pb-1 border-b-2 border-gray-200 dark:border-gray-700 flex items-center gap-2 px-1">
-                            <i class="fa-solid fa-folder-minus text-gray-400"></i>
-                            <h4 class="text-lg font-bold text-gray-500 dark:text-gray-400">其他 (未設定次分類)</h4>
-                        </div>`;
-                    }
-                    lastSubCat = currentSubCat;
+                if (currentSubCat) {
+                    headerHtml = `
+                    <div class="mt-4 mb-2 pb-1 border-b-2 border-indigo-200 dark:border-indigo-800/60 flex items-center gap-2 px-1">
+                        <i class="fa-solid fa-layer-group text-indigo-500"></i>
+                        <h4 class="text-lg font-bold text-indigo-700 dark:text-indigo-400">${currentSubCat}</h4>
+                    </div>`;
+                } else {
+                    headerHtml = `
+                    <div class="mt-4 mb-2 pb-1 border-b-2 border-gray-200 dark:border-gray-700 flex items-center gap-2 px-1">
+                        <i class="fa-solid fa-folder-minus text-gray-400"></i>
+                        <h4 class="text-lg font-bold text-gray-500 dark:text-gray-400">其他 (未設定次分類)</h4>
+                    </div>`;
                 }
 
-                const itemHtml = `
-                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-3 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                    <div class="flex items-center gap-3 w-full md:w-auto">
-                        <span class="text-xs font-semibold px-2 py-1 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 whitespace-nowrap border border-blue-100 dark:border-blue-800/50">${item.category}</span>
-                        <h3 class="font-bold text-lg sm:text-xl truncate" style="color: ${nameColor}">${item.name}</h3>
-                    </div>
-                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
-                        <div class="flex items-center justify-between sm:justify-start gap-2 bg-gray-50 dark:bg-gray-900/50 p-1.5 rounded-lg border border-gray-100 dark:border-gray-700">
-                            <label class="text-xs font-medium text-gray-500 dark:text-gray-400 pl-1 w-8 shrink-0">前台</label>
-                            <div class="flex items-center rounded-md border border-gray-200 dark:border-gray-600 overflow-hidden shrink-0">
-                                <button onclick="window.appAdjustCount('${item.id}', 'front', -1)" class="w-8 h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">-</button>
-                                <input type="number" min="0" value="${frontQty}" id="input_front_${item.id}" class="w-12 h-8 text-center border-0 focus:ring-0 p-0 text-base font-bold bg-white dark:bg-gray-700 dark:text-white hide-arrows">
-                                <button onclick="window.appAdjustCount('${item.id}', 'front', 1)" class="w-8 h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">+</button>
-                            </div>
-                            <button id="btn_front_${item.id}" onclick="window.appSaveCount('${item.id}', 'front')" class="${hasFrontCount ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400'} w-14 h-8 rounded-md hover:opacity-80 transition-colors text-xs font-bold whitespace-nowrap shrink-0">${hasFrontCount ? '更新' : '儲存'}</button>
+                const itemsHtml = group.items.map(item => {
+                    const hasFrontCount = state.counts.hasOwnProperty(`${item.id}_front`);
+                    const hasWarehouseCount = state.counts.hasOwnProperty(`${item.id}_warehouse`);
+                    const frontQty = hasFrontCount ? state.counts[`${item.id}_front`] : 0;
+                    const warehouseQty = hasWarehouseCount ? state.counts[`${item.id}_warehouse`] : 0;
+                    const nameColor = item.color || (state.isDarkMode ? '#ffffff' : '#1f2937');
+
+                    return `
+                    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-3 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                        <div class="flex items-center gap-3 w-full md:w-auto">
+                            <span class="text-xs font-semibold px-2 py-1 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 whitespace-nowrap border border-blue-100 dark:border-blue-800/50">${item.category}</span>
+                            <h3 class="font-bold text-lg sm:text-xl truncate" style="color: ${nameColor}">${item.name}</h3>
                         </div>
-                        <div class="flex items-center justify-between sm:justify-start gap-2 bg-gray-50 dark:bg-gray-900/50 p-1.5 rounded-lg border border-gray-100 dark:border-gray-700">
-                            <label class="text-xs font-medium text-gray-500 dark:text-gray-400 pl-1 w-8 shrink-0">倉庫</label>
-                            <div class="flex items-center rounded-md border border-gray-200 dark:border-gray-600 overflow-hidden shrink-0">
-                                <button onclick="window.appAdjustCount('${item.id}', 'warehouse', -1)" class="w-8 h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">-</button>
-                                <input type="number" min="0" value="${warehouseQty}" id="input_warehouse_${item.id}" class="w-12 h-8 text-center border-0 focus:ring-0 p-0 text-base font-bold bg-white dark:bg-gray-700 dark:text-white hide-arrows">
-                                <button onclick="window.appAdjustCount('${item.id}', 'warehouse', 1)" class="w-8 h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">+</button>
+                        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
+                            <div class="flex items-center justify-between sm:justify-start gap-2 bg-gray-50 dark:bg-gray-900/50 p-1.5 rounded-lg border border-gray-100 dark:border-gray-700">
+                                <label class="text-xs font-medium text-gray-500 dark:text-gray-400 pl-1 w-8 shrink-0">前台</label>
+                                <div class="flex items-center rounded-md border border-gray-200 dark:border-gray-600 overflow-hidden shrink-0">
+                                    <button onclick="window.appAdjustCount('${item.id}', 'front', -1)" class="w-8 h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">-</button>
+                                    <input type="number" min="0" value="${frontQty}" id="input_front_${item.id}" class="w-12 h-8 text-center border-0 focus:ring-0 p-0 text-base font-bold bg-white dark:bg-gray-700 dark:text-white hide-arrows">
+                                    <button onclick="window.appAdjustCount('${item.id}', 'front', 1)" class="w-8 h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">+</button>
+                                </div>
+                                <button id="btn_front_${item.id}" onclick="window.appSaveCount('${item.id}', 'front')" class="${hasFrontCount ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400'} w-14 h-8 rounded-md hover:opacity-80 transition-colors text-xs font-bold whitespace-nowrap shrink-0">${hasFrontCount ? '更新' : '儲存'}</button>
                             </div>
-                            <button id="btn_warehouse_${item.id}" onclick="window.appSaveCount('${item.id}', 'warehouse')" class="${hasWarehouseCount ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400'} w-14 h-8 rounded-md hover:opacity-80 transition-colors text-xs font-bold whitespace-nowrap shrink-0">${hasWarehouseCount ? '更新' : '儲存'}</button>
+                            <div class="flex items-center justify-between sm:justify-start gap-2 bg-gray-50 dark:bg-gray-900/50 p-1.5 rounded-lg border border-gray-100 dark:border-gray-700">
+                                <label class="text-xs font-medium text-gray-500 dark:text-gray-400 pl-1 w-8 shrink-0">倉庫</label>
+                                <div class="flex items-center rounded-md border border-gray-200 dark:border-gray-600 overflow-hidden shrink-0">
+                                    <button onclick="window.appAdjustCount('${item.id}', 'warehouse', -1)" class="w-8 h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">-</button>
+                                    <input type="number" min="0" value="${warehouseQty}" id="input_warehouse_${item.id}" class="w-12 h-8 text-center border-0 focus:ring-0 p-0 text-base font-bold bg-white dark:bg-gray-700 dark:text-white hide-arrows">
+                                    <button onclick="window.appAdjustCount('${item.id}', 'warehouse', 1)" class="w-8 h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">+</button>
+                                </div>
+                                <button id="btn_warehouse_${item.id}" onclick="window.appSaveCount('${item.id}', 'warehouse')" class="${hasWarehouseCount ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400'} w-14 h-8 rounded-md hover:opacity-80 transition-colors text-xs font-bold whitespace-nowrap shrink-0">${hasWarehouseCount ? '更新' : '儲存'}</button>
+                            </div>
                         </div>
-                    </div>
-                </div>`;
+                    </div>`;
+                }).join('');
                 
-                return headerHtml + itemHtml;
+                return headerHtml + itemsHtml;
             }).join('');
         }
 
         function renderAdminTable(items) {
-            DOM.adminTableBody.innerHTML = items.map(item => {
-                const frontQty = state.counts[`${item.id}_front`] || 0;
-                const warehouseQty = state.counts[`${item.id}_warehouse`] || 0;
-                const totalQty = frontQty + warehouseQty;
-                const orderQty = state.orderCounts[item.id] !== undefined ? state.orderCounts[item.id] : '';
-                const nameColor = item.color || (state.isDarkMode ? '#ffffff' : '#1f2937');
-                
-                const subCatBadge = item.subCategory ? `<span class="mt-1 px-2 inline-flex text-[10px] leading-4 font-semibold rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-700">${item.subCategory}</span>` : '';
+            const groups = groupItemsBySubCategory(items);
 
-                return `
-                <tr data-id="${item.id}" draggable="true" ondragstart="window.appItemDragStart(event, '${item.id}')" ondragend="window.appItemDragEnd(event)" ondragover="window.appItemDragOver(event)" ondragenter="window.appItemDragEnter(event)" ondragleave="window.appItemDragLeave(event)" ondrop="window.appItemDrop(event, '${item.id}')" class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-move">
-                    <td class="px-6 py-4 whitespace-nowrap text-gray-400 dark:text-gray-500"><i class="fa-solid fa-grip-vertical"></i></td>
-                    <td class="px-6 py-4 whitespace-nowrap pointer-events-none align-middle">
-                        <div class="flex flex-col items-start gap-1">
+            DOM.adminTableBody.innerHTML = groups.map(group => {
+                const currentSubCat = group.subCategory;
+                const subCatName = currentSubCat || '其他 (未設定次分類)';
+                const icon = currentSubCat ? 'fa-layer-group' : 'fa-folder-minus';
+                
+                const headerRow = `
+                    <tr class="bg-indigo-50 dark:bg-indigo-900/20 pointer-events-none">
+                        <td colspan="8" class="px-6 py-2 text-sm font-bold text-indigo-700 dark:text-indigo-400 border-y border-indigo-100 dark:border-indigo-800/50">
+                            <i class="fa-solid ${icon} mr-1"></i> ${subCatName}
+                        </td>
+                    </tr>
+                `;
+
+                const itemRows = group.items.map(item => {
+                    const frontQty = state.counts[`${item.id}_front`] || 0;
+                    const warehouseQty = state.counts[`${item.id}_warehouse`] || 0;
+                    const totalQty = frontQty + warehouseQty;
+                    const orderQty = state.orderCounts[item.id] !== undefined ? state.orderCounts[item.id] : '';
+                    const nameColor = item.color || (state.isDarkMode ? '#ffffff' : '#1f2937');
+
+                    return `
+                    <tr data-id="${item.id}" draggable="true" ondragstart="window.appItemDragStart(event, '${item.id}')" ondragend="window.appItemDragEnd(event)" ondragover="window.appItemDragOver(event)" ondragenter="window.appItemDragEnter(event)" ondragleave="window.appItemDragLeave(event)" ondrop="window.appItemDrop(event, '${item.id}')" class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-move">
+                        <td class="px-6 py-4 whitespace-nowrap text-gray-400 dark:text-gray-500"><i class="fa-solid fa-grip-vertical"></i></td>
+                        <td class="px-6 py-4 whitespace-nowrap pointer-events-none w-24">
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400">${item.category}</span>
-                            ${subCatBadge}
-                        </div>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap pointer-events-none"><div class="text-base sm:text-lg font-bold" style="color: ${nameColor}">${item.name}</div></td>
-                    <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-700 dark:text-gray-300 pointer-events-none">${frontQty}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-700 dark:text-gray-300 pointer-events-none">${warehouseQty}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-center pointer-events-none"><div class="text-sm font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 py-1 rounded">${totalQty}</div></td>
-                    <td class="px-6 py-4 whitespace-nowrap text-center"><input type="number" min="0" value="${orderQty}" placeholder="-" onchange="window.appSaveOrderCount('${item.id}', this.value)" onmousedown="event.stopPropagation()" class="w-16 h-8 text-center border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-indigo-500 outline-none font-bold bg-white dark:bg-gray-700 dark:text-white hide-arrows text-indigo-700 dark:text-indigo-400"></td>
-                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div class="flex items-center justify-end gap-2">
-                            <button onclick="window.appViewHistory('${item.id}', '${item.name}')" class="text-indigo-500 hover:text-indigo-700 transition-colors p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/40" title="盤點紀錄"><i class="fa-solid fa-clock-rotate-left"></i></button>
-                            <button onclick="window.appEditItem('${item.id}')" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors p-2 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600" title="編輯品項"><i class="fa-solid fa-pen-to-square"></i></button>
-                            <button onclick="window.appDeleteItem('${item.id}', '${item.name}')" class="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors p-2 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40" title="刪除"><i class="fa-solid fa-trash-can"></i></button>
-                        </div>
-                    </td>
-                </tr>`;
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap pointer-events-none"><div class="text-base sm:text-lg font-bold" style="color: ${nameColor}">${item.name}</div></td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-700 dark:text-gray-300 pointer-events-none">${frontQty}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-700 dark:text-gray-300 pointer-events-none">${warehouseQty}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center pointer-events-none"><div class="text-sm font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 py-1 rounded">${totalQty}</div></td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center"><input type="number" min="0" value="${orderQty}" placeholder="-" onchange="window.appSaveOrderCount('${item.id}', this.value)" onmousedown="event.stopPropagation()" class="w-16 h-8 text-center border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-indigo-500 outline-none font-bold bg-white dark:bg-gray-700 dark:text-white hide-arrows text-indigo-700 dark:text-indigo-400"></td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <div class="flex items-center justify-end gap-2">
+                                <button onclick="window.appViewHistory('${item.id}', '${item.name}')" class="text-indigo-500 hover:text-indigo-700 transition-colors p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/40" title="盤點紀錄"><i class="fa-solid fa-clock-rotate-left"></i></button>
+                                <button onclick="window.appEditItem('${item.id}')" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors p-2 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600" title="編輯品項"><i class="fa-solid fa-pen-to-square"></i></button>
+                                <button onclick="window.appDeleteItem('${item.id}', '${item.name}')" class="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors p-2 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40" title="刪除"><i class="fa-solid fa-trash-can"></i></button>
+                            </div>
+                        </td>
+                    </tr>`;
+                }).join('');
+
+                return headerRow + itemRows;
             }).join('');
         }
 
