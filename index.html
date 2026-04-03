@@ -451,6 +451,7 @@
             orderCounts: {}, 
             history: [], 
             categories: ['飲品', '食品', '耗材', '包裝', '其他'],
+            collapsedGroups: {}, // 紀錄摺疊狀態 { "subCatName": true/false }
             activeTab: '全部',
             searchQuery: '',
             itemToDelete: null,
@@ -849,7 +850,14 @@
             DOM.itemFormModal.showModal();
         };
 
-        // 【新增功能】複製並建立新項目
+        // 【新增功能】群組展開/摺疊切換
+        window.appToggleGroup = function(groupName) {
+            state.collapsedGroups[groupName] = !state.collapsedGroups[groupName];
+            localStorage.setItem('inv_collapsed', JSON.stringify(state.collapsedGroups));
+            renderItems();
+        };
+
+        // 複製並建立新項目
         window.appCopyItem = function(itemId) {
             const item = state.items.find(i => i.id === itemId);
             if (!item) return;
@@ -1150,23 +1158,35 @@
 
             DOM.itemsGrid.innerHTML = groups.map(group => {
                 const currentSubCat = group.subCategory;
+                const subCatName = currentSubCat || '其他 (未設定次分類)';
+                const isCollapsed = state.collapsedGroups[subCatName] || false;
+                const icon = currentSubCat ? 'fa-layer-group' : 'fa-folder-minus';
+                
                 let headerHtml = '';
                 
                 if (currentSubCat) {
                     headerHtml = `
-                    <div class="mt-4 mb-2 pb-1 border-b-2 border-indigo-200 dark:border-indigo-800/60 flex items-center gap-2 px-1">
-                        <i class="fa-solid fa-layer-group text-indigo-500"></i>
-                        <h4 class="text-lg font-bold text-indigo-700 dark:text-indigo-400">${currentSubCat}</h4>
+                    <div class="mt-4 mb-2 pb-1 border-b-2 border-indigo-200 dark:border-indigo-800/60 flex items-center justify-between px-1 cursor-pointer select-none hover:opacity-80 transition-opacity" onclick="window.appToggleGroup('${subCatName}')">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-chevron-${isCollapsed ? 'right' : 'down'} text-indigo-500 w-4 text-center transition-transform"></i>
+                            <i class="fa-solid ${icon} text-indigo-500"></i>
+                            <h4 class="text-xl sm:text-2xl font-bold text-indigo-700 dark:text-indigo-400">${subCatName}</h4>
+                        </div>
+                        <span class="text-sm font-bold text-indigo-400 bg-indigo-100 dark:bg-indigo-900/50 px-2 py-0.5 rounded-full">${group.items.length}</span>
                     </div>`;
                 } else {
                     headerHtml = `
-                    <div class="mt-4 mb-2 pb-1 border-b-2 border-gray-200 dark:border-gray-700 flex items-center gap-2 px-1">
-                        <i class="fa-solid fa-folder-minus text-gray-400"></i>
-                        <h4 class="text-lg font-bold text-gray-500 dark:text-gray-400">其他 (未設定次分類)</h4>
+                    <div class="mt-4 mb-2 pb-1 border-b-2 border-gray-200 dark:border-gray-700 flex items-center justify-between px-1 cursor-pointer select-none hover:opacity-80 transition-opacity" onclick="window.appToggleGroup('${subCatName}')">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-chevron-${isCollapsed ? 'right' : 'down'} text-gray-500 w-4 text-center transition-transform"></i>
+                            <i class="fa-solid ${icon} text-gray-400"></i>
+                            <h4 class="text-xl sm:text-2xl font-bold text-gray-500 dark:text-gray-400">${subCatName}</h4>
+                        </div>
+                        <span class="text-sm font-bold text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">${group.items.length}</span>
                     </div>`;
                 }
 
-                const itemsHtml = group.items.map(item => {
+                const itemsHtml = `<div class="flex flex-col gap-3 ${isCollapsed ? 'hidden' : ''}">` + group.items.map(item => {
                     const hasFrontCount = state.counts.hasOwnProperty(`${item.id}_front`);
                     const hasWarehouseCount = state.counts.hasOwnProperty(`${item.id}_warehouse`);
                     const hasAnyCount = hasFrontCount || hasWarehouseCount;
@@ -1207,7 +1227,7 @@
                             </button>
                         </div>
                     </div>`;
-                }).join('');
+                }).join('') + `</div>`;
                 
                 return headerHtml + itemsHtml;
             }).join('');
@@ -1219,12 +1239,22 @@
             DOM.adminTableBody.innerHTML = groups.map(group => {
                 const currentSubCat = group.subCategory;
                 const subCatName = currentSubCat || '其他 (未設定次分類)';
+                const isCollapsed = state.collapsedGroups[subCatName] || false;
                 const icon = currentSubCat ? 'fa-layer-group' : 'fa-folder-minus';
                 
+                const headerColorClass = currentSubCat 
+                    ? "bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 border-indigo-100 dark:border-indigo-800/50" 
+                    : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700";
+
                 const headerRow = `
-                    <tr class="bg-indigo-50 dark:bg-indigo-900/20 pointer-events-none">
-                        <td colspan="8" class="px-6 py-2 text-sm font-bold text-indigo-700 dark:text-indigo-400 border-y border-indigo-100 dark:border-indigo-800/50">
-                            <i class="fa-solid ${icon} mr-1"></i> ${subCatName}
+                    <tr class="cursor-pointer select-none hover:opacity-80 transition-opacity ${headerColorClass}" onclick="window.appToggleGroup('${subCatName}')">
+                        <td colspan="8" class="px-6 py-3 text-base sm:text-xl font-bold border-y ${headerColorClass}">
+                            <div class="flex items-center gap-2">
+                                <i class="fa-solid fa-chevron-${isCollapsed ? 'right' : 'down'} w-4 text-center transition-transform"></i>
+                                <i class="fa-solid ${icon}"></i> 
+                                <span>${subCatName}</span>
+                                <span class="ml-2 text-sm font-normal opacity-70 bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded-full">${group.items.length} 項</span>
+                            </div>
                         </td>
                     </tr>
                 `;
@@ -1237,7 +1267,7 @@
                     const nameColor = item.color || (state.isDarkMode ? '#ffffff' : '#1f2937');
 
                     return `
-                    <tr data-id="${item.id}" draggable="true" ondragstart="window.appItemDragStart(event, '${item.id}')" ondragend="window.appItemDragEnd(event)" ondragover="window.appItemDragOver(event)" ondragenter="window.appItemDragEnter(event)" ondragleave="window.appItemDragLeave(event)" ondrop="window.appItemDrop(event, '${item.id}')" class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-move">
+                    <tr data-id="${item.id}" draggable="true" ondragstart="window.appItemDragStart(event, '${item.id}')" ondragend="window.appItemDragEnd(event)" ondragover="window.appItemDragOver(event)" ondragenter="window.appItemDragEnter(event)" ondragleave="window.appItemDragLeave(event)" ondrop="window.appItemDrop(event, '${item.id}')" class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-move ${isCollapsed ? 'hidden' : ''}">
                         <td class="px-6 py-4 whitespace-nowrap text-gray-400 dark:text-gray-500"><i class="fa-solid fa-grip-vertical"></i></td>
                         <td class="px-6 py-4 whitespace-nowrap pointer-events-none w-24">
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400">${item.category}</span>
@@ -1285,7 +1315,7 @@
                     CloudDB.save();
                 }
 
-                // 深色模式設定只保留在本地設備
+                // 深色模式與摺疊設定只保留在本地設備
                 const storedDarkMode = localStorage.getItem('inv_darkmode');
                 if (storedDarkMode !== null) {
                     state.isDarkMode = storedDarkMode === 'true';
@@ -1293,6 +1323,13 @@
                     state.isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
                 }
                 applyDarkMode();
+
+                const storedCollapsed = localStorage.getItem('inv_collapsed');
+                if (storedCollapsed) {
+                    try {
+                        state.collapsedGroups = JSON.parse(storedCollapsed);
+                    } catch(e) { }
+                }
 
                 renderUI();
 
