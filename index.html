@@ -849,6 +849,30 @@
             DOM.itemFormModal.showModal();
         };
 
+        // 【新增功能】複製並建立新項目
+        window.appCopyItem = function(itemId) {
+            const item = state.items.find(i => i.id === itemId);
+            if (!item) return;
+
+            DOM.itemForm.reset();
+            DOM.editItemId.value = ''; // 保持空值，這樣送出時才會當作「新增」
+            DOM.itemFormTitle.innerText = '複製並新增品項';
+            DOM.submitItemFormBtn.innerText = '確認新增';
+            
+            // 重新生成選項確保最新
+            DOM.formItemCategory.innerHTML = state.categories.map(cat => `<option value="${cat}">${cat}</option>`).join('');
+            const uniqueSubCats = [...new Set(state.items.map(i => i.subCategory).filter(Boolean))];
+            DOM.subCategoryList.innerHTML = uniqueSubCats.map(sub => `<option value="${sub}">`).join('');
+            
+            // 自動帶入原項目的設定，名稱後方加上標記方便識別
+            DOM.formItemName.value = item.name; 
+            DOM.formItemCategory.value = item.category; 
+            DOM.formItemSubCategory.value = item.subCategory || '';
+            DOM.formItemColor.value = item.color || (state.isDarkMode ? '#ffffff' : '#1f2937');
+            
+            DOM.itemFormModal.showModal();
+        };
+
         window.appClearCurrentHistory = function() {
             if (!state.currentHistoryItemId) return;
             if (confirm('確定要清空此品項的「所有盤點歷史紀錄」嗎？\n(注意：此動作無法復原，但不影響當前總庫存數字)')) {
@@ -1172,6 +1196,7 @@
                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <div class="flex items-center justify-end gap-2">
                                 <button onclick="window.appViewHistory('${item.id}', '${item.name}')" class="text-indigo-500 hover:text-indigo-700 transition-colors p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/40" title="盤點紀錄"><i class="fa-solid fa-clock-rotate-left"></i></button>
+                                <button onclick="window.appCopyItem('${item.id}')" class="text-emerald-500 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors p-2 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/40" title="複製項目"><i class="fa-solid fa-copy"></i></button>
                                 <button onclick="window.appEditItem('${item.id}')" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors p-2 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600" title="編輯品項"><i class="fa-solid fa-pen-to-square"></i></button>
                                 <button onclick="window.appDeleteItem('${item.id}', '${item.name}')" class="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors p-2 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40" title="刪除"><i class="fa-solid fa-trash-can"></i></button>
                             </div>
