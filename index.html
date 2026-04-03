@@ -101,7 +101,8 @@
 
     <!-- 頂部導覽列 -->
     <nav class="bg-blue-600 dark:bg-gray-800 text-white shadow-md sticky top-0 z-40 transition-colors duration-200">
-        <div class="max-w-5xl mx-auto px-4 py-3 flex justify-between items-center">
+        <!-- 加寬至 max-w-7xl -->
+        <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
             <!-- Logo 區域 -->
             <div id="logoContainer" class="flex items-center gap-2 select-none">
                 <img src="logo4.png" alt="庫存盤點系統 Logo" id="mainLogo" class="h-8 w-auto object-contain rounded" onerror="this.style.display='none'; document.getElementById('fallbackIcon').classList.remove('hidden');">
@@ -137,7 +138,8 @@
     <div id="toastContainer" class="fixed top-16 left-1/2 transform -translate-x-1/2 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
     <!-- 主要內容區 -->
-    <main class="max-w-5xl mx-auto px-4 mt-6">
+    <!-- 加寬至 max-w-7xl -->
+    <main class="max-w-7xl mx-auto px-4 mt-6">
         
         <!-- 載入中狀態 -->
         <div id="loadingState" class="flex flex-col items-center justify-center py-20">
@@ -178,25 +180,21 @@
                         <i class="fa-solid fa-circle-info shrink-0"></i>
                         <span>提示：可直接按住次分類標題或品項列前方的 `⋮⋮` 進行拖曳排序，排定後自動同步至所有裝置。</span>
                     </div>
-                    <!-- 匯出訂購單按鈕 -->
-                    <button onclick="window.appExportOrder()" class="shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold py-1.5 px-4 rounded-lg shadow transition-colors flex items-center gap-2">
-                        <i class="fa-solid fa-file-excel"></i> 匯出訂購單 (Excel)
-                    </button>
+                    <!-- 成本與匯出按鈕區 -->
+                    <div class="flex items-center gap-2 shrink-0">
+                        <button id="toggleCostBtn" onclick="window.appToggleCosts()" class="shrink-0 bg-yellow-500 hover:bg-yellow-600 text-white text-sm font-bold py-1.5 px-3 sm:px-4 rounded-lg shadow transition-colors flex items-center gap-2">
+                            <i id="toggleCostBtnIcon" class="fa-solid fa-eye-slash"></i>
+                            <span id="toggleCostBtnText" class="hidden sm:inline">顯示成本</span>
+                        </button>
+                        <button onclick="window.appExportOrder()" class="shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold py-1.5 px-3 sm:px-4 rounded-lg shadow transition-colors flex items-center gap-2">
+                            <i class="fa-solid fa-file-excel"></i> 匯出訂購單 (Excel)
+                        </button>
+                    </div>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                        <thead class="bg-gray-50 dark:bg-gray-900">
-                            <tr>
-                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-8"></th>
-                                <!-- 分類移至最左邊 -->
-                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">分類</th>
-                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">品項名稱</th>
-                                <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">前台數量</th>
-                                <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">倉庫數量</th>
-                                <th scope="col" class="px-6 py-3 text-center text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">總庫存</th>
-                                <th scope="col" class="px-6 py-3 text-center text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">訂購數量</th>
-                                <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">操作</th>
-                            </tr>
+                        <!-- 表頭改由 JS 動態生成，以支援成本欄位的顯示與隱藏 -->
+                        <thead class="bg-gray-50 dark:bg-gray-900" id="adminTableHead">
                         </thead>
                         <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700" id="adminTableBody">
                             <!-- 動態生成表格內容 -->
@@ -538,7 +536,8 @@
             searchQuery: '',
             itemToDelete: null,
             currentHistoryItemId: null,
-            isDarkMode: false
+            isDarkMode: false,
+            showCosts: false // 新增：是否顯示成本與小計的狀態
         };
 
         // DOM 元素參考
@@ -548,6 +547,7 @@
             categoryTabs: document.getElementById('categoryTabs'),
             itemsGrid: document.getElementById('itemsGrid'),
             adminTableView: document.getElementById('adminTableView'),
+            adminTableHead: document.getElementById('adminTableHead'),
             adminTableBody: document.getElementById('adminTableBody'),
             emptyState: document.getElementById('emptyState'),
             searchInput: document.getElementById('searchInput'),
@@ -900,6 +900,7 @@
                         name: item.name,
                         category: newMainCat, // 使用選擇的新主分類
                         subCategory: newSubCat,
+                        cost: item.cost || 0, // 複製時保留成本
                         color: item.color,
                         createdAt: Date.now()
                     }));
@@ -992,7 +993,7 @@
                 } else {
                     state.items.push({
                         id: 'item_' + Date.now(),
-                        name: name, category: category, subCategory: subCategory, color: color, createdAt: Date.now()
+                        name: name, category: category, subCategory: subCategory, color: color, createdAt: Date.now(), cost: 0
                     });
                     showToast('品項新增成功！');
                     if (state.activeTab !== '全部' && state.activeTab !== category) state.activeTab = category;
@@ -1199,6 +1200,33 @@
             renderItems();
         };
 
+        // 【新增功能】切換成本顯示狀態
+        window.appToggleCosts = function() {
+            if (state.showCosts) {
+                state.showCosts = false;
+                renderItems();
+            } else {
+                const pwd = prompt("請輸入管理員密碼以顯示成本及金額：");
+                if (pwd === CloudDB.getAdminPassword()) {
+                    state.showCosts = true;
+                    renderItems();
+                } else if (pwd !== null) {
+                    showToast('密碼錯誤', true);
+                }
+            }
+        };
+
+        // 【新增功能】即時儲存成本
+        window.appSaveCost = function(itemId, val) {
+            const cost = parseFloat(val);
+            const item = state.items.find(i => i.id === itemId);
+            if (item) {
+                item.cost = isNaN(cost) || cost < 0 ? 0 : cost;
+                CloudDB.save();
+                renderItems(); // 重繪以更新小計
+            }
+        };
+
         // 單一品項複製並建立新項目
         window.appCopyItem = function(itemId) {
             const item = state.items.find(i => i.id === itemId);
@@ -1389,12 +1417,17 @@
                 const worksheet = workbook.addWorksheet('訂購單');
                 
                 // 設定欄位樣式
-                worksheet.columns = [
+                const columns = [
                     { header: '主分類', key: 'cat', width: 15, style: { alignment: { horizontal: 'center', vertical: 'middle' } } },
                     { header: '次分類', key: 'subCat', width: 20, style: { alignment: { horizontal: 'center', vertical: 'middle' } } },
                     { header: '品項名稱', key: 'name', width: 40, style: { alignment: { horizontal: 'left', vertical: 'middle' } } },
                     { header: '訂購數量', key: 'qty', width: 15, style: { alignment: { horizontal: 'center', vertical: 'middle' } } }
                 ];
+                if (state.showCosts) {
+                    columns.push({ header: '單項成本', key: 'cost', width: 15, style: { alignment: { horizontal: 'center', vertical: 'middle' } } });
+                    columns.push({ header: '小計', key: 'subtotal', width: 15, style: { alignment: { horizontal: 'center', vertical: 'middle' } } });
+                }
+                worksheet.columns = columns;
                 
                 const headerRow = worksheet.getRow(1);
                 headerRow.font = { bold: true, size: 12 }; 
@@ -1404,14 +1437,25 @@
                 
                 // 3. 依照次分類分群寫入，並加入空白列間隔
                 const groups = groupItemsBySubCategory(orderItems);
+                let grandTotal = 0;
+
                 groups.forEach((group, index) => {
                     group.items.forEach(item => { 
-                        worksheet.addRow({ 
+                        const qty = state.orderCounts[item.id] || 0;
+                        const rowData = { 
                             cat: item.category,
                             subCat: item.subCategory || '',
                             name: item.name, 
-                            qty: state.orderCounts[item.id] 
-                        }); 
+                            qty: qty 
+                        };
+                        if (state.showCosts) {
+                            const cost = item.cost || 0;
+                            const subtotal = cost * qty;
+                            rowData.cost = cost;
+                            rowData.subtotal = subtotal;
+                            grandTotal += subtotal;
+                        }
+                        worksheet.addRow(rowData); 
                     });
                     
                     // 在不同次分類群組之間加入空白列間隔 (最後一組除外)
@@ -1419,6 +1463,18 @@
                         worksheet.addRow({}); 
                     }
                 });
+                
+                // 如果有開啟成本，在最底下加上總計行
+                if (state.showCosts && orderItems.length > 0) {
+                    worksheet.addRow({});
+                    const totalRow = worksheet.addRow({
+                        name: '總計應付金額',
+                        subtotal: grandTotal
+                    });
+                    totalRow.font = { bold: true, color: { argb: 'FFD97706' } }; // Amber color
+                    worksheet.mergeCells(`A${totalRow.number}:E${totalRow.number}`);
+                    totalRow.getCell('name').alignment = { horizontal: 'right', vertical: 'middle' };
+                }
                 
                 // 移除全部框線設定，保持原生乾淨的版面
 
@@ -1533,8 +1589,40 @@
             DOM.emptyState.classList.add('hidden'); DOM.emptyState.classList.remove('flex');
             updateToggleAllButtonIcon();
 
-            if (state.role === 'admin') { DOM.adminTableView.classList.remove('hidden'); renderAdminTable(filteredItems); } 
-            else { renderStaffGrid(filteredItems); }
+            if (state.role === 'admin') { 
+                DOM.adminTableView.classList.remove('hidden'); 
+                
+                // 動態生成後台表頭 (以支援成本顯示切換)
+                const theadHTML = `
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-8"></th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">分類</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">品項名稱</th>
+                        <th scope="col" class="px-6 py-3 text-center text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">前台數量</th>
+                        <th scope="col" class="px-6 py-3 text-center text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">倉庫數量</th>
+                        <th scope="col" class="px-6 py-3 text-center text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">總庫存</th>
+                        <th scope="col" class="px-6 py-3 text-center text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">訂購數量</th>
+                        ${state.showCosts ? `
+                        <th scope="col" class="px-6 py-3 text-center text-xs font-bold text-yellow-600 dark:text-yellow-400 uppercase tracking-wider">單項成本</th>
+                        <th scope="col" class="px-6 py-3 text-center text-xs font-bold text-yellow-600 dark:text-yellow-400 uppercase tracking-wider">小計</th>
+                        ` : ''}
+                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">操作</th>
+                    </tr>
+                `;
+                DOM.adminTableHead.innerHTML = theadHTML;
+                
+                // 更新顯示成本按鈕樣式
+                const toggleCostBtnIcon = document.getElementById('toggleCostBtnIcon');
+                const toggleCostBtnText = document.getElementById('toggleCostBtnText');
+                if (toggleCostBtnIcon && toggleCostBtnText) {
+                    toggleCostBtnIcon.className = state.showCosts ? 'fa-solid fa-eye' : 'fa-solid fa-eye-slash';
+                    toggleCostBtnText.innerText = state.showCosts ? '隱藏成本' : '顯示成本';
+                }
+
+                renderAdminTable(filteredItems); 
+            } else { 
+                renderStaffGrid(filteredItems); 
+            }
         }
 
         function renderStaffGrid(items) {
@@ -1587,21 +1675,21 @@
                         <div class="flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2 w-full md:w-auto overflow-x-auto no-scrollbar pb-1 sm:pb-0 shrink-0">
                             <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
                                 <!-- 前台輸入組 -->
-                                <div class="flex items-center gap-1 sm:gap-2 bg-gray-50 dark:bg-gray-900/50 p-1 sm:p-1.5 rounded-lg border border-gray-100 dark:border-gray-700">
-                                    <label class="text-[11px] sm:text-xs font-medium text-gray-500 dark:text-gray-400 pl-1 shrink-0">前台</label>
-                                    <div class="flex items-center rounded-md border border-gray-200 dark:border-gray-600 overflow-hidden shrink-0">
-                                        <button onclick="window.appAdjustCount('${item.id}', 'front', -1)" class="w-7 h-7 sm:w-8 sm:h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">-</button>
-                                        <input type="number" inputmode="numeric" pattern="[0-9]*" min="0" value="${frontQty}" id="input_front_${item.id}" onfocus="this.select()" class="w-8 h-7 sm:w-12 sm:h-8 text-center border-0 focus:ring-0 p-0 text-sm sm:text-base font-bold bg-white dark:bg-gray-700 dark:text-white hide-arrows">
-                                        <button onclick="window.appAdjustCount('${item.id}', 'front', 1)" class="w-7 h-7 sm:w-8 sm:h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">+</button>
+                                <div class="flex items-center gap-1 sm:gap-2 bg-blue-50/50 dark:bg-blue-900/20 p-1 sm:p-1.5 rounded-lg border border-blue-100 dark:border-blue-800/50">
+                                    <label class="text-[11px] sm:text-xs font-bold text-blue-600 dark:text-blue-400 pl-1 shrink-0">前台</label>
+                                    <div class="flex items-center rounded-md border border-blue-200 dark:border-blue-700 overflow-hidden shrink-0">
+                                        <button onclick="window.appAdjustCount('${item.id}', 'front', -1)" class="w-7 h-7 sm:w-8 sm:h-8 bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">-</button>
+                                        <input type="number" inputmode="numeric" pattern="[0-9]*" min="0" value="${frontQty}" id="input_front_${item.id}" onfocus="this.select()" class="w-8 h-7 sm:w-12 sm:h-8 text-center border-0 focus:ring-0 p-0 text-sm sm:text-base font-bold bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 hide-arrows">
+                                        <button onclick="window.appAdjustCount('${item.id}', 'front', 1)" class="w-7 h-7 sm:w-8 sm:h-8 bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">+</button>
                                     </div>
                                 </div>
                                 <!-- 倉庫輸入組 -->
-                                <div class="flex items-center gap-1 sm:gap-2 bg-gray-50 dark:bg-gray-900/50 p-1 sm:p-1.5 rounded-lg border border-gray-100 dark:border-gray-700">
-                                    <label class="text-[11px] sm:text-xs font-medium text-gray-500 dark:text-gray-400 pl-1 shrink-0">倉庫</label>
-                                    <div class="flex items-center rounded-md border border-gray-200 dark:border-gray-600 overflow-hidden shrink-0">
-                                        <button onclick="window.appAdjustCount('${item.id}', 'warehouse', -1)" class="w-7 h-7 sm:w-8 sm:h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">-</button>
-                                        <input type="number" inputmode="numeric" pattern="[0-9]*" min="0" value="${warehouseQty}" id="input_warehouse_${item.id}" onfocus="this.select()" class="w-8 h-7 sm:w-12 sm:h-8 text-center border-0 focus:ring-0 p-0 text-sm sm:text-base font-bold bg-white dark:bg-gray-700 dark:text-white hide-arrows">
-                                        <button onclick="window.appAdjustCount('${item.id}', 'warehouse', 1)" class="w-7 h-7 sm:w-8 sm:h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">+</button>
+                                <div class="flex items-center gap-1 sm:gap-2 bg-amber-50/50 dark:bg-amber-900/20 p-1 sm:p-1.5 rounded-lg border border-amber-100 dark:border-amber-800/50">
+                                    <label class="text-[11px] sm:text-xs font-bold text-amber-600 dark:text-amber-500 pl-1 shrink-0">倉庫</label>
+                                    <div class="flex items-center rounded-md border border-amber-200 dark:border-amber-700 overflow-hidden shrink-0">
+                                        <button onclick="window.appAdjustCount('${item.id}', 'warehouse', -1)" class="w-7 h-7 sm:w-8 sm:h-8 bg-white dark:bg-gray-700 text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">-</button>
+                                        <input type="number" inputmode="numeric" pattern="[0-9]*" min="0" value="${warehouseQty}" id="input_warehouse_${item.id}" onfocus="this.select()" class="w-8 h-7 sm:w-12 sm:h-8 text-center border-0 focus:ring-0 p-0 text-sm sm:text-base font-bold bg-white dark:bg-gray-700 text-amber-600 dark:text-amber-400 hide-arrows">
+                                        <button onclick="window.appAdjustCount('${item.id}', 'warehouse', 1)" class="w-7 h-7 sm:w-8 sm:h-8 bg-white dark:bg-gray-700 text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">+</button>
                                     </div>
                                 </div>
                             </div>
@@ -1632,9 +1720,12 @@
                     ? "bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 border-indigo-100 dark:border-indigo-800/50" 
                     : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700";
 
+                const colspan = state.showCosts ? 10 : 8;
+                const groupTotalCost = group.items.reduce((sum, item) => sum + (item.cost || 0) * (state.orderCounts[item.id] || 0), 0);
+
                 const headerRow = `
                     <tr class="group-header cursor-pointer select-none hover:opacity-80 transition-opacity ${headerColorClass}" data-group="${subCatName}" draggable="true" ondragstart="window.appGroupDragStart(event, '${subCatName}')" ondragend="window.appGroupDragEnd(event)" ondragover="window.appGroupDragOver(event)" ondragenter="window.appGroupDragEnter(event)" ondragleave="window.appGroupDragLeave(event)" ondrop="window.appGroupDrop(event, '${subCatName}')" onclick="window.appToggleGroup('${subCatName}')">
-                        <td colspan="8" class="px-6 py-3 text-base sm:text-xl font-bold border-y ${headerColorClass}">
+                        <td colspan="${colspan}" class="px-6 py-3 text-base sm:text-xl font-bold border-y ${headerColorClass}">
                             <div class="flex items-center gap-2">
                                 <i class="fa-solid fa-grip-vertical text-indigo-300 dark:text-indigo-600 mr-2 cursor-move hover:text-indigo-500 transition-colors" title="拖曳排序整個次分類" onclick="event.stopPropagation()"></i>
                                 <i class="fa-solid fa-chevron-${isCollapsed ? 'right' : 'down'} w-4 text-center transition-transform"></i>
@@ -1648,6 +1739,8 @@
                                 </div>
                                 ` : ''}
                                 <span class="ml-2 text-sm font-normal opacity-70 bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded-full">${group.items.length} 項</span>
+                                
+                                ${state.showCosts ? `<span class="ml-auto text-sm font-bold bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-400 px-3 py-0.5 rounded-full shadow-inner">群組小計: $${groupTotalCost}</span>` : ''}
                             </div>
                         </td>
                     </tr>
@@ -1667,10 +1760,23 @@
                             <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400">${item.category}</span>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap pointer-events-none"><div class="text-base sm:text-lg font-bold" style="color: ${nameColor}">${item.name}</div></td>
-                        <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-700 dark:text-gray-300 pointer-events-none">${frontQty}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-700 dark:text-gray-300 pointer-events-none">${warehouseQty}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-center pointer-events-none"><div class="text-sm font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 py-1 rounded">${totalQty}</div></td>
-                        <td class="px-6 py-4 whitespace-nowrap text-center"><input type="number" id="order_input_${item.id}" inputmode="numeric" pattern="[0-9]*" min="0" value="${orderQty}" placeholder="-" onchange="window.appSaveOrderCount('${item.id}', this.value)" onfocus="this.select()" onmousedown="event.stopPropagation()" class="w-16 h-8 text-center border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-indigo-500 outline-none font-bold bg-white dark:bg-gray-700 dark:text-white hide-arrows text-indigo-700 dark:text-indigo-400"></td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-blue-600 dark:text-blue-400 pointer-events-none">${frontQty}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-amber-600 dark:text-amber-400 pointer-events-none">${warehouseQty}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center pointer-events-none"><div class="text-sm font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 py-1 rounded">${totalQty}</div></td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center"><input type="number" id="order_input_${item.id}" inputmode="numeric" pattern="[0-9]*" min="0" value="${orderQty}" placeholder="-" onchange="window.appSaveOrderCount('${item.id}', this.value)" onfocus="this.select()" onmousedown="event.stopPropagation()" class="w-16 h-8 text-center border border-emerald-300 dark:border-emerald-600 rounded-md focus:ring-2 focus:ring-emerald-500 outline-none font-bold bg-emerald-50 dark:bg-emerald-900/20 dark:text-white hide-arrows text-emerald-700 dark:text-emerald-400"></td>
+                        
+                        ${state.showCosts ? `
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <div class="flex items-center justify-center gap-1">
+                                <span class="text-gray-400 font-bold">$</span>
+                                <input type="number" inputmode="numeric" min="0" value="${item.cost || ''}" placeholder="0" onchange="window.appSaveCost('${item.id}', this.value)" onfocus="this.select()" onmousedown="event.stopPropagation()" class="w-16 h-8 text-center border border-yellow-300 dark:border-yellow-600 rounded-md focus:ring-2 focus:ring-yellow-500 outline-none font-bold bg-yellow-50 dark:bg-yellow-900/20 dark:text-white hide-arrows text-yellow-700 dark:text-yellow-400">
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center font-bold text-yellow-600 dark:text-yellow-400 text-lg">
+                            $${(item.cost || 0) * (orderQty || 0)}
+                        </td>
+                        ` : ''}
+                        
                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <div class="flex items-center justify-end gap-2">
                                 <button onclick="window.appViewHistory('${item.id}', '${item.name}')" class="text-indigo-500 hover:text-indigo-700 transition-colors p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/40" title="盤點紀錄"><i class="fa-solid fa-clock-rotate-left"></i></button>
