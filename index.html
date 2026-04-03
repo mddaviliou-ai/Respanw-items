@@ -1254,8 +1254,10 @@
                 ];
                 
                 const headerRow = worksheet.getRow(1);
-                headerRow.font = { bold: true, size: 12 }; headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
-                headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+                headerRow.font = { bold: true, size: 12 }; 
+                headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+                // 改為指定的橘色背景
+                headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF79646' } }; 
                 
                 // 3. 依照次分類分群寫入，並加入空白列間隔
                 const groups = groupItemsBySubCategory(orderItems);
@@ -1275,22 +1277,7 @@
                     }
                 });
                 
-                // 智慧設定框線 (只針對有資料的列加框線，略過間隔用的空白列)
-                worksheet.eachRow(function(row, rowNumber) {
-                    let hasData = false;
-                    row.eachCell(function(cell) {
-                        if (cell.value !== null && cell.value !== undefined && cell.value !== '') {
-                            hasData = true;
-                        }
-                    });
-                    
-                    // 只有標題列(1)和有資料的列才加框線
-                    if (rowNumber === 1 || hasData) {
-                        for (let i = 1; i <= 4; i++) {
-                            row.getCell(i).border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
-                        }
-                    }
-                });
+                // 移除全部框線設定，保持原生乾淨的版面
 
                 const buffer = await workbook.xlsx.writeBuffer();
                 const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
