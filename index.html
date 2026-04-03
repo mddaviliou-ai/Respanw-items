@@ -788,10 +788,13 @@
                 clearTimeout(clickTimer);
                 if (clickCount >= 3) {
                     clickCount = 0;
-                    const input = prompt("請輸入指令以重置密碼：");
+                    // 新增了防呆：如果有輸入錯誤會顯示 toast
+                    const input = prompt("請輸入重置指令 (提示: admin)：");
                     if (input === 'admin') {
                         CloudDB.setAdminPassword('1234');
-                        showToast('管理密碼已重置為預設 (1234)');
+                        showToast('管理密碼已成功重置為預設：1234');
+                    } else if (input !== null) {
+                        showToast('指令錯誤，重置失敗', true);
                     }
                 } else {
                     clickTimer = setTimeout(() => { clickCount = 0; }, 800);
@@ -992,7 +995,7 @@
                 showToast('整個次分類及其品項已刪除');
             });
             
-            // 歸零所有數量邏輯
+            // 歸零所有數量邏輯 (需輸入清空)
             DOM.clearAllConfirmInput.addEventListener('input', (e) => {
                 DOM.confirmClearAllBtn.disabled = e.target.value !== '清空';
             });
@@ -1824,7 +1827,7 @@
                                     <span class="text-xs font-bold text-blue-600 bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 px-2 py-0.5 rounded shadow-sm"><span class="hidden sm:inline">前台: </span>${frontSum}</span>
                                     <span class="text-xs font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 px-2 py-0.5 rounded shadow-sm"><span class="hidden sm:inline">倉庫: </span>${warehouseSum}</span>
                                     ${state.showCosts ? `<span class="text-sm font-bold bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-400 px-3 py-0.5 rounded-full shadow-inner">群組小計: $${groupTotalCost}</span>` : ''}
-                                    <span class="ml-1 text-sm font-normal opacity-70 bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded-full shrink-0">${group.items.length}<span class="hidden sm:inline"> 項</span></span>
+                                    <span class="ml-2 text-sm font-normal opacity-70 bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded-full shrink-0">${group.items.length}<span class="hidden sm:inline"> 項</span></span>
                                 </div>
                             </div>
                         </td>
