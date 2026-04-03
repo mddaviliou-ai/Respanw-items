@@ -355,7 +355,7 @@
     </dialog>
 
     <!-- 複製次分類 Modal -->
-    <dialog id="copySubCategoryModal" class="p-0 rounded-2xl shadow-2xl backdrop:bg-black backdrop:bg-opacity-50 w-11/12 max-w-sm m-auto dark:bg-gray-800">
+    <dialog id="copySubCategoryModal" class="p-0 rounded-2xl shadow-2xl backdrop:bg-black backdrop:bg-opacity-50 w-11/12 max-w-md m-auto dark:bg-gray-800">
         <div class="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden">
             <div class="bg-emerald-600 px-6 py-4 flex items-center gap-2 text-white">
                 <i class="fa-solid fa-copy"></i>
@@ -363,11 +363,21 @@
             </div>
             <form id="copySubCategoryForm" class="p-6 space-y-4">
                 <input type="hidden" id="oldCopySubCategoryName" value="">
-                <p class="text-sm text-gray-500 dark:text-gray-400">這將複製此次分類下的<span class="font-bold text-emerald-600 dark:text-emerald-400">所有品項</span>至新的次分類中，且庫存會自動歸零。</p>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">新次分類名稱</label>
-                    <input type="text" id="newCopySubCategoryNameInput" required class="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:outline-none dark:bg-gray-700 dark:text-white">
+                <p class="text-sm text-gray-500 dark:text-gray-400">這將複製此次分類下的<span class="font-bold text-emerald-600 dark:text-emerald-400">所有品項</span>，並自動將新項目的庫存歸零。您可指定新的歸屬分類：</p>
+                
+                <div class="flex flex-col sm:flex-row gap-4">
+                    <div class="flex-1">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">目標主分類</label>
+                        <select id="copySubCategoryMainCatInput" required class="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:outline-none dark:bg-gray-700 dark:text-white">
+                            <!-- 動態生成選項 -->
+                        </select>
+                    </div>
+                    <div class="flex-1">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">新次分類名稱</label>
+                        <input type="text" id="newCopySubCategoryNameInput" required class="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:outline-none dark:bg-gray-700 dark:text-white">
+                    </div>
                 </div>
+
                 <div class="pt-2 flex gap-3">
                     <button type="button" id="cancelCopySubCategoryBtn" class="flex-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 py-2 rounded-lg font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">取消</button>
                     <button type="submit" class="flex-1 bg-emerald-600 text-white py-2 rounded-lg font-medium hover:bg-emerald-700 transition-colors">確認複製</button>
@@ -588,6 +598,7 @@
             copySubCategoryForm: document.getElementById('copySubCategoryForm'),
             oldCopySubCategoryName: document.getElementById('oldCopySubCategoryName'),
             newCopySubCategoryNameInput: document.getElementById('newCopySubCategoryNameInput'),
+            copySubCategoryMainCatInput: document.getElementById('copySubCategoryMainCatInput'),
             cancelCopySubCategoryBtn: document.getElementById('cancelCopySubCategoryBtn'),
 
             deleteSubCategoryModal: document.getElementById('deleteSubCategoryModal'),
@@ -831,51 +842,64 @@
                 }
             });
 
-            // 次分類重新命名邏輯
+            // 次分類重新命名邏輯 (限定在目前的分頁)
             DOM.cancelRenameSubCategoryBtn.addEventListener('click', () => DOM.renameSubCategoryModal.close());
             DOM.renameSubCategoryForm.addEventListener('submit', (e) => {
                 e.preventDefault();
                 const oldCat = DOM.oldSubCategoryName.value;
-                const newCat = DOM.newSubCategoryNameInput.value.trim();
+                let newCat = DOM.newSubCategoryNameInput.value.trim();
 
                 if (newCat && newCat !== oldCat) {
+                    if (newCat === '其他 (未設定次分類)') newCat = '';
+                    
+                    let changedCount = 0;
                     state.items.forEach(item => {
-                        if (item.subCategory === oldCat) {
+                        if ((item.subCategory || '其他 (未設定次分類)') === oldCat && 
+                            (state.activeTab === '全部' || item.category === state.activeTab)) {
                             item.subCategory = newCat;
+                            changedCount++;
                         }
                     });
 
-                    if (state.collapsedGroups.hasOwnProperty(oldCat)) {
-                        state.collapsedGroups[newCat] = state.collapsedGroups[oldCat];
-                        delete state.collapsedGroups[oldCat];
-                        localStorage.setItem('inv_collapsed', JSON.stringify(state.collapsedGroups));
+                    if (changedCount > 0) {
+                        if (state.collapsedGroups.hasOwnProperty(oldCat)) {
+                            state.collapsedGroups[newCat || '其他 (未設定次分類)'] = state.collapsedGroups[oldCat];
+                        }
+                        CloudDB.save();
+                        DOM.renameSubCategoryModal.close();
+                        renderItems();
+                        showToast('次分類名稱已更新');
+                    } else {
+                        DOM.renameSubCategoryModal.close();
                     }
-
-                    CloudDB.save();
-                    DOM.renameSubCategoryModal.close();
-                    renderItems();
-                    showToast('次分類名稱已更新');
                 } else {
                     DOM.renameSubCategoryModal.close();
                 }
             });
 
-            // 次分類複製邏輯
+            // 次分類複製邏輯 (允許選擇目標主分類，且限定來源在目前分頁)
             DOM.cancelCopySubCategoryBtn.addEventListener('click', () => DOM.copySubCategoryModal.close());
             DOM.copySubCategoryForm.addEventListener('submit', (e) => {
                 e.preventDefault();
                 const oldCat = DOM.oldCopySubCategoryName.value;
-                const newCat = DOM.newCopySubCategoryNameInput.value.trim();
+                let newSubCat = DOM.newCopySubCategoryNameInput.value.trim();
+                const newMainCat = DOM.copySubCategoryMainCatInput.value;
 
-                if (newCat) {
-                    const itemsToCopy = state.items.filter(item => item.subCategory === oldCat);
+                if (newSubCat && newMainCat) {
+                    const itemsToCopy = state.items.filter(item => 
+                        (item.subCategory || '其他 (未設定次分類)') === oldCat && 
+                        (state.activeTab === '全部' || item.category === state.activeTab)
+                    );
+                    
                     if (itemsToCopy.length === 0) return;
+
+                    if (newSubCat === '其他 (未設定次分類)') newSubCat = '';
 
                     const newItems = itemsToCopy.map(item => ({
                         id: 'item_' + Date.now() + Math.random().toString(36).substr(2, 9),
                         name: item.name,
-                        category: item.category,
-                        subCategory: newCat,
+                        category: newMainCat, // 使用選擇的新主分類
+                        subCategory: newSubCat,
                         color: item.color,
                         createdAt: Date.now()
                     }));
@@ -884,11 +908,11 @@
                     CloudDB.save();
                     DOM.copySubCategoryModal.close();
                     renderItems();
-                    showToast(`已成功複製 ${newItems.length} 個品項至 ${newCat}`);
+                    showToast(`已成功複製 ${newItems.length} 個品項至 ${newMainCat}`);
                 }
             });
 
-            // 次分類刪除邏輯
+            // 次分類刪除邏輯 (限定在目前的分頁)
             DOM.deleteSubCategoryConfirmInput.addEventListener('input', (e) => {
                 DOM.confirmDeleteSubCategoryBtn.disabled = e.target.value !== '刪除';
             });
@@ -898,11 +922,14 @@
                 const targetCat = DOM.deleteSubCategoryTarget.value;
                 if (DOM.deleteSubCategoryConfirmInput.value !== '刪除') return;
 
-                const itemsToDelete = state.items.filter(item => item.subCategory === targetCat);
+                const itemsToDelete = state.items.filter(item => 
+                    (item.subCategory || '其他 (未設定次分類)') === targetCat && 
+                    (state.activeTab === '全部' || item.category === state.activeTab)
+                );
                 const idsToDelete = itemsToDelete.map(i => i.id);
 
                 // 移除品項
-                state.items = state.items.filter(item => item.subCategory !== targetCat);
+                state.items = state.items.filter(item => !idsToDelete.includes(item.id));
 
                 // 清理相關數量與歷史
                 idsToDelete.forEach(id => {
@@ -1099,18 +1126,33 @@
 
         window.appEditSubCategory = function(oldSubCat) {
             DOM.oldSubCategoryName.value = oldSubCat; 
-            DOM.newSubCategoryNameInput.value = oldSubCat; 
+            DOM.newSubCategoryNameInput.value = oldSubCat === '其他 (未設定次分類)' ? '' : oldSubCat; 
             DOM.renameSubCategoryModal.showModal();
         };
 
+        // 開啟複製次分類 Modal
         window.appCopySubCategory = function(oldSubCat) {
             DOM.oldCopySubCategoryName.value = oldSubCat;
-            DOM.newCopySubCategoryNameInput.value = oldSubCat + ' (複製)';
+            DOM.newCopySubCategoryNameInput.value = oldSubCat === '其他 (未設定次分類)' ? '新次分類' : oldSubCat + ' (複製)';
+            
+            // 找出當前視角下的第一個範例品項，用來預設主分類
+            const sampleItem = state.items.find(i => 
+                (i.subCategory || '其他 (未設定次分類)') === oldSubCat && 
+                (state.activeTab === '全部' || i.category === state.activeTab)
+            );
+            const defaultMainCat = sampleItem ? sampleItem.category : state.categories[0];
+
+            DOM.copySubCategoryMainCatInput.innerHTML = state.categories.map(cat => `<option value="${cat}">${cat}</option>`).join('');
+            DOM.copySubCategoryMainCatInput.value = defaultMainCat;
+
             DOM.copySubCategoryModal.showModal();
         };
 
         window.appDeleteSubCategory = function(subCat) {
-            const count = state.items.filter(item => item.subCategory === subCat).length;
+            const count = state.items.filter(item => 
+                (item.subCategory || '其他 (未設定次分類)') === subCat && 
+                (state.activeTab === '全部' || item.category === state.activeTab)
+            ).length;
             DOM.deleteSubCategoryTarget.value = subCat;
             DOM.deleteSubCategoryNameText.innerText = subCat;
             DOM.deleteSubCategoryCountText.innerText = count;
