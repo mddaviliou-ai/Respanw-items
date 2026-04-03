@@ -146,12 +146,19 @@
         </div>
 
         <div id="appContent" class="hidden">
-            <!-- 搜尋吧 -->
-            <div class="relative mb-6">
-                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <i class="fa-solid fa-search text-gray-400 dark:text-gray-500"></i>
+            <!-- 搜尋吧與全部展開/摺疊按鈕 -->
+            <div class="flex gap-2 mb-6 items-center">
+                <div class="relative flex-1">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <i class="fa-solid fa-search text-gray-400 dark:text-gray-500"></i>
+                    </div>
+                    <input type="text" id="searchInput" placeholder="搜尋品項名稱..." class="block w-full pl-10 pr-3 py-3 border border-gray-300 dark:border-gray-600 rounded-xl leading-5 bg-white dark:bg-gray-800 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm shadow-sm transition-colors duration-200">
                 </div>
-                <input type="text" id="searchInput" placeholder="搜尋品項名稱..." class="block w-full pl-10 pr-3 py-3 border border-gray-300 dark:border-gray-600 rounded-xl leading-5 bg-white dark:bg-gray-800 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm shadow-sm transition-colors duration-200">
+                <!-- 展開/摺疊全部 -->
+                <button onclick="window.appToggleAllGroups()" class="shrink-0 px-3 sm:px-4 py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center gap-2 font-medium">
+                    <i id="toggleAllIcon" class="fa-solid fa-compress"></i> 
+                    <span id="toggleAllText" class="hidden sm:inline">全部摺疊</span>
+                </button>
             </div>
 
             <!-- 分類標籤 (Tabs) -->
@@ -168,8 +175,8 @@
             <div id="adminTableView" class="hidden bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden transition-colors duration-200">
                 <div class="bg-blue-50/50 dark:bg-blue-900/10 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                     <div class="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
-                        <i class="fa-solid fa-circle-info"></i>
-                        <span>提示：可直接拖曳表格中的品項列以更改排序位置，排定後將自動同步至所有裝置。</span>
+                        <i class="fa-solid fa-circle-info shrink-0"></i>
+                        <span>提示：可直接按住次分類標題或品項列前方的 `⋮⋮` 進行拖曳排序，排定後自動同步至所有裝置。</span>
                     </div>
                     <!-- 匯出訂購單按鈕 -->
                     <button onclick="window.appExportOrder()" class="shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold py-1.5 px-4 rounded-lg shadow transition-colors flex items-center gap-2">
@@ -347,7 +354,7 @@
         </div>
     </dialog>
 
-    <!-- 【新增】複製次分類 Modal -->
+    <!-- 複製次分類 Modal -->
     <dialog id="copySubCategoryModal" class="p-0 rounded-2xl shadow-2xl backdrop:bg-black backdrop:bg-opacity-50 w-11/12 max-w-sm m-auto dark:bg-gray-800">
         <div class="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden">
             <div class="bg-emerald-600 px-6 py-4 flex items-center gap-2 text-white">
@@ -369,7 +376,7 @@
         </div>
     </dialog>
 
-    <!-- 【新增】刪除次分類確認 Modal -->
+    <!-- 刪除次分類確認 Modal -->
     <dialog id="deleteSubCategoryModal" class="p-0 rounded-2xl shadow-2xl backdrop:bg-black backdrop:bg-opacity-50 w-11/12 max-w-sm m-auto dark:bg-gray-800">
         <div class="bg-white dark:bg-gray-800 p-6 rounded-2xl text-center">
             <div class="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto mb-4 text-red-500 dark:text-red-400 text-2xl">
@@ -677,6 +684,22 @@
             localStorage.setItem('inv_darkmode', state.isDarkMode);
         }
 
+        function updateToggleAllButtonIcon() {
+            const currentSubCats = [...new Set(state.items.filter(i => state.activeTab === '全部' || i.category === state.activeTab).map(i => i.subCategory || '其他 (未設定次分類)'))];
+            const allCollapsed = currentSubCats.length > 0 && currentSubCats.every(sub => state.collapsedGroups[sub]);
+            const btnIcon = document.getElementById('toggleAllIcon');
+            const btnText = document.getElementById('toggleAllText');
+            if (btnIcon && btnText) {
+                if (allCollapsed) {
+                    btnIcon.className = 'fa-solid fa-expand';
+                    btnText.innerText = '全部展開';
+                } else {
+                    btnIcon.className = 'fa-solid fa-compress';
+                    btnText.innerText = '全部摺疊';
+                }
+            }
+        }
+
         function setupEventListeners() {
             // 網站首次進入密碼與人員名稱驗證
             DOM.siteLoginForm.addEventListener('submit', (e) => {
@@ -971,6 +994,8 @@
         }
 
         // ================= 將全域函數掛載到 window，供 HTML onclick 使用 =================
+        
+        // --- 單一品項拖曳邏輯 ---
         let draggedItemId = null;
         window.appItemDragStart = function(e, id) { draggedItemId = id; e.dataTransfer.effectAllowed = 'move'; setTimeout(() => e.target.classList.add('opacity-50'), 0); }
         window.appItemDragEnd = function(e) { e.target.classList.remove('opacity-50'); document.querySelectorAll('tr').forEach(el => el.classList.remove('bg-blue-50', 'dark:bg-blue-900/50')); }
@@ -979,7 +1004,7 @@
         window.appItemDragLeave = function(e) { const tr = e.target.closest('tr'); if (tr && (!e.relatedTarget || !tr.contains(e.relatedTarget))) tr.classList.remove('bg-blue-50', 'dark:bg-blue-900/50'); }
         window.appItemDrop = function(e, targetId) {
             e.preventDefault(); const tr = e.target.closest('tr'); if (tr) tr.classList.remove('bg-blue-50', 'dark:bg-blue-900/50');
-            if (!draggedItemId || draggedItemId === targetId) return;
+            if (!draggedItemId || !targetId || draggedItemId === targetId) return;
             const fromIdx = state.items.findIndex(i => i.id === draggedItemId);
             const toIdx = state.items.findIndex(i => i.id === targetId);
             if (fromIdx > -1 && toIdx > -1) {
@@ -989,6 +1014,68 @@
             }
         }
 
+        // --- 次分類群組拖曳邏輯 ---
+        let draggedGroupName = null;
+        window.appGroupDragStart = function(e, groupName) { 
+            draggedGroupName = groupName; 
+            e.dataTransfer.effectAllowed = 'move'; 
+            setTimeout(() => e.target.classList.add('opacity-50'), 0); 
+        }
+        window.appGroupDragEnd = function(e) { 
+            e.target.classList.remove('opacity-50'); 
+            document.querySelectorAll('.group-header').forEach(el => el.classList.remove('bg-indigo-100', 'dark:bg-indigo-900/40')); 
+        }
+        window.appGroupDragOver = function(e) { 
+            e.preventDefault(); 
+            e.dataTransfer.dropEffect = 'move'; 
+        }
+        window.appGroupDragEnter = function(e) { 
+            e.preventDefault(); 
+            const tr = e.target.closest('.group-header'); 
+            if (tr && draggedGroupName && tr.getAttribute('data-group') !== draggedGroupName) {
+                tr.classList.add('bg-indigo-100', 'dark:bg-indigo-900/40');
+            } 
+        }
+        window.appGroupDragLeave = function(e) { 
+            const tr = e.target.closest('.group-header'); 
+            if (tr && (!e.relatedTarget || !tr.contains(e.relatedTarget))) {
+                tr.classList.remove('bg-indigo-100', 'dark:bg-indigo-900/40');
+            } 
+        }
+        window.appGroupDrop = function(e, targetGroupName) {
+            e.preventDefault(); 
+            e.stopPropagation(); // 避免觸發品項拖曳
+            const tr = e.target.closest('.group-header'); 
+            if (tr) tr.classList.remove('bg-indigo-100', 'dark:bg-indigo-900/40');
+            
+            if (!draggedGroupName || draggedGroupName === targetGroupName) return;
+
+            // 取得當前分類下的所有項目
+            const currentTabItems = state.activeTab === '全部' ? state.items : state.items.filter(i => i.category === state.activeTab);
+            
+            // 找出要搬移的群組項目
+            const draggedItems = currentTabItems.filter(i => (i.subCategory || '其他 (未設定次分類)') === draggedGroupName);
+            if(draggedItems.length === 0) return;
+
+            // 從總陣列中移除要搬移的項目
+            const remainingItems = state.items.filter(i => !draggedItems.includes(i));
+            
+            // 尋找目標群組在剩餘陣列中的插入點
+            const targetIndex = remainingItems.findIndex(i => (i.subCategory || '其他 (未設定次分類)') === targetGroupName && (state.activeTab === '全部' || i.category === state.activeTab));
+            
+            if (targetIndex !== -1) {
+                // 插入至目標群組的最前方
+                remainingItems.splice(targetIndex, 0, ...draggedItems);
+            } else {
+                remainingItems.push(...draggedItems);
+            }
+            
+            state.items = remainingItems;
+            CloudDB.save(); 
+            renderItems();
+        }
+
+        // --- 分類標籤拖曳邏輯 ---
         let draggedCategory = null;
         window.appDragStart = function(e, cat) { draggedCategory = cat; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', cat); setTimeout(() => e.target.classList.add('opacity-50'), 0); }
         window.appDragEnd = function(e) { e.target.classList.remove('opacity-50'); document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); }
@@ -1048,6 +1135,20 @@
             DOM.formItemColor.value = item.color || (state.isDarkMode ? '#ffffff' : '#1f2937');
             DOM.itemFormModal.showModal();
         };
+
+        // 【新增功能】一鍵全部摺疊/展開
+        window.appToggleAllGroups = function() {
+            const currentSubCats = [...new Set(state.items.filter(i => state.activeTab === '全部' || i.category === state.activeTab).map(i => i.subCategory || '其他 (未設定次分類)'))];
+            // 只要有一個群組是「展開的(false/undefined)」，我們就執行「全部摺疊(true)」。如果全都是摺疊的，就執行「全部展開(false)」。
+            const anyExpanded = currentSubCats.some(sub => !state.collapsedGroups[sub]);
+            
+            currentSubCats.forEach(sub => {
+                state.collapsedGroups[sub] = anyExpanded; 
+            });
+            
+            localStorage.setItem('inv_collapsed', JSON.stringify(state.collapsedGroups));
+            renderItems();
+        }
 
         // 【新增功能】群組展開/摺疊切換
         window.appToggleGroup = function(groupName) {
@@ -1201,7 +1302,7 @@
 
             // 視覺回饋
             btnEl.innerHTML = '<i class="fa-solid fa-check"></i>';
-            btnEl.className = 'bg-green-500 text-white dark:bg-green-600 w-16 h-10 sm:h-auto py-1.5 rounded-lg flex items-center justify-center transition-colors text-sm font-bold whitespace-nowrap shrink-0 border border-green-600';
+            btnEl.className = 'bg-green-500 text-white dark:bg-green-600 px-3 h-9 sm:h-auto sm:w-16 py-1.5 rounded-lg flex items-center justify-center transition-colors text-xs sm:text-sm font-bold whitespace-nowrap shrink-0 border border-green-600 ml-auto sm:ml-0';
 
             if (changed) {
                 CloudDB.save(); 
@@ -1213,7 +1314,7 @@
             // 恢復按鈕狀態
             setTimeout(() => {
                 btnEl.innerText = '更新';
-                btnEl.className = 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400 w-16 h-10 sm:h-auto py-1.5 rounded-lg hover:opacity-80 transition-colors text-sm font-bold whitespace-nowrap shrink-0 border border-green-200 dark:border-green-800';
+                btnEl.className = 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400 px-3 h-9 sm:h-auto sm:w-16 py-1.5 rounded-lg hover:opacity-80 transition-colors text-xs sm:text-sm font-bold whitespace-nowrap shrink-0 border border-green-200 dark:border-green-800 ml-auto sm:ml-0';
             }, 1000);
         }
 
@@ -1382,10 +1483,14 @@
             if (filteredItems.length === 0) {
                 DOM.itemsGrid.innerHTML = ''; DOM.adminTableBody.innerHTML = '';
                 DOM.emptyState.classList.remove('hidden'); DOM.emptyState.classList.add('flex');
-                DOM.adminTableView.classList.add('hidden'); return;
+                DOM.adminTableView.classList.add('hidden'); 
+                updateToggleAllButtonIcon();
+                return;
             }
 
             DOM.emptyState.classList.add('hidden'); DOM.emptyState.classList.remove('flex');
+            updateToggleAllButtonIcon();
+
             if (state.role === 'admin') { DOM.adminTableView.classList.remove('hidden'); renderAdminTable(filteredItems); } 
             else { renderStaffGrid(filteredItems); }
         }
@@ -1434,32 +1539,34 @@
                     return `
                     <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-3 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                         <div class="flex items-center gap-3 w-full md:w-auto">
-                            <span class="text-xs font-semibold px-2 py-1 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 whitespace-nowrap border border-blue-100 dark:border-blue-800/50">${item.category}</span>
+                            <span class="text-xs font-semibold px-2 py-1 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 whitespace-nowrap border border-blue-100 dark:border-blue-800/50 shrink-0">${item.category}</span>
                             <h3 class="font-bold text-lg sm:text-xl truncate" style="color: ${nameColor}">${item.name}</h3>
                         </div>
-                        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
-                            <!-- 前台輸入組 -->
-                            <div class="flex items-center justify-between sm:justify-start gap-2 bg-gray-50 dark:bg-gray-900/50 p-1.5 rounded-lg border border-gray-100 dark:border-gray-700">
-                                <label class="text-xs font-medium text-gray-500 dark:text-gray-400 pl-1 w-8 shrink-0">前台</label>
-                                <div class="flex items-center rounded-md border border-gray-200 dark:border-gray-600 overflow-hidden shrink-0">
-                                    <button onclick="window.appAdjustCount('${item.id}', 'front', -1)" class="w-8 h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">-</button>
-                                    <input type="number" inputmode="numeric" pattern="[0-9]*" min="0" value="${frontQty}" id="input_front_${item.id}" class="w-12 h-8 text-center border-0 focus:ring-0 p-0 text-base font-bold bg-white dark:bg-gray-700 dark:text-white hide-arrows">
-                                    <button onclick="window.appAdjustCount('${item.id}', 'front', 1)" class="w-8 h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">+</button>
+                        <div class="flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2 w-full md:w-auto overflow-x-auto no-scrollbar pb-1 sm:pb-0 shrink-0">
+                            <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                                <!-- 前台輸入組 -->
+                                <div class="flex items-center gap-1 sm:gap-2 bg-gray-50 dark:bg-gray-900/50 p-1 sm:p-1.5 rounded-lg border border-gray-100 dark:border-gray-700">
+                                    <label class="text-[11px] sm:text-xs font-medium text-gray-500 dark:text-gray-400 pl-1 shrink-0">前台</label>
+                                    <div class="flex items-center rounded-md border border-gray-200 dark:border-gray-600 overflow-hidden shrink-0">
+                                        <button onclick="window.appAdjustCount('${item.id}', 'front', -1)" class="w-7 h-7 sm:w-8 sm:h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">-</button>
+                                        <input type="number" inputmode="numeric" pattern="[0-9]*" min="0" value="${frontQty}" id="input_front_${item.id}" class="w-8 h-7 sm:w-12 sm:h-8 text-center border-0 focus:ring-0 p-0 text-sm sm:text-base font-bold bg-white dark:bg-gray-700 dark:text-white hide-arrows">
+                                        <button onclick="window.appAdjustCount('${item.id}', 'front', 1)" class="w-7 h-7 sm:w-8 sm:h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">+</button>
+                                    </div>
                                 </div>
-                            </div>
-                            <!-- 倉庫輸入組 -->
-                            <div class="flex items-center justify-between sm:justify-start gap-2 bg-gray-50 dark:bg-gray-900/50 p-1.5 rounded-lg border border-gray-100 dark:border-gray-700">
-                                <label class="text-xs font-medium text-gray-500 dark:text-gray-400 pl-1 w-8 shrink-0">倉庫</label>
-                                <div class="flex items-center rounded-md border border-gray-200 dark:border-gray-600 overflow-hidden shrink-0">
-                                    <button onclick="window.appAdjustCount('${item.id}', 'warehouse', -1)" class="w-8 h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">-</button>
-                                    <input type="number" inputmode="numeric" pattern="[0-9]*" min="0" value="${warehouseQty}" id="input_warehouse_${item.id}" class="w-12 h-8 text-center border-0 focus:ring-0 p-0 text-base font-bold bg-white dark:bg-gray-700 dark:text-white hide-arrows">
-                                    <button onclick="window.appAdjustCount('${item.id}', 'warehouse', 1)" class="w-8 h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">+</button>
+                                <!-- 倉庫輸入組 -->
+                                <div class="flex items-center gap-1 sm:gap-2 bg-gray-50 dark:bg-gray-900/50 p-1 sm:p-1.5 rounded-lg border border-gray-100 dark:border-gray-700">
+                                    <label class="text-[11px] sm:text-xs font-medium text-gray-500 dark:text-gray-400 pl-1 shrink-0">倉庫</label>
+                                    <div class="flex items-center rounded-md border border-gray-200 dark:border-gray-600 overflow-hidden shrink-0">
+                                        <button onclick="window.appAdjustCount('${item.id}', 'warehouse', -1)" class="w-7 h-7 sm:w-8 sm:h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">-</button>
+                                        <input type="number" inputmode="numeric" pattern="[0-9]*" min="0" value="${warehouseQty}" id="input_warehouse_${item.id}" class="w-8 h-7 sm:w-12 sm:h-8 text-center border-0 focus:ring-0 p-0 text-sm sm:text-base font-bold bg-white dark:bg-gray-700 dark:text-white hide-arrows">
+                                        <button onclick="window.appAdjustCount('${item.id}', 'warehouse', 1)" class="w-7 h-7 sm:w-8 sm:h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">+</button>
+                                    </div>
                                 </div>
                             </div>
                             <!-- 合併的儲存按鈕 -->
                             <button id="btn_save_${item.id}" onclick="window.appSaveBothCounts('${item.id}')" 
                                 class="${hasAnyCount ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400 border-green-200 dark:border-green-800' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400 border-blue-200 dark:border-blue-800'} 
-                                w-16 h-10 sm:h-auto py-1.5 rounded-lg hover:opacity-80 transition-colors text-sm font-bold whitespace-nowrap shrink-0 border">
+                                px-3 h-9 sm:h-auto sm:w-16 py-1.5 rounded-lg hover:opacity-80 transition-colors text-xs sm:text-sm font-bold whitespace-nowrap shrink-0 border ml-auto sm:ml-0">
                                 ${hasAnyCount ? '更新' : '儲存'}
                             </button>
                         </div>
@@ -1484,9 +1591,10 @@
                     : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700";
 
                 const headerRow = `
-                    <tr class="cursor-pointer select-none hover:opacity-80 transition-opacity ${headerColorClass}" onclick="window.appToggleGroup('${subCatName}')">
+                    <tr class="group-header cursor-pointer select-none hover:opacity-80 transition-opacity ${headerColorClass}" data-group="${subCatName}" draggable="true" ondragstart="window.appGroupDragStart(event, '${subCatName}')" ondragend="window.appGroupDragEnd(event)" ondragover="window.appGroupDragOver(event)" ondragenter="window.appGroupDragEnter(event)" ondragleave="window.appGroupDragLeave(event)" ondrop="window.appGroupDrop(event, '${subCatName}')" onclick="window.appToggleGroup('${subCatName}')">
                         <td colspan="8" class="px-6 py-3 text-base sm:text-xl font-bold border-y ${headerColorClass}">
                             <div class="flex items-center gap-2">
+                                <i class="fa-solid fa-grip-vertical text-indigo-300 dark:text-indigo-600 mr-2 cursor-move hover:text-indigo-500 transition-colors" title="拖曳排序整個次分類" onclick="event.stopPropagation()"></i>
                                 <i class="fa-solid fa-chevron-${isCollapsed ? 'right' : 'down'} w-4 text-center transition-transform"></i>
                                 <i class="fa-solid ${icon}"></i> 
                                 <span>${subCatName}</span>
