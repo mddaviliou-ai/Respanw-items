@@ -337,22 +337,34 @@
             </div>
             <form id="itemForm" class="p-6 space-y-4">
                 <input type="hidden" id="editItemId" value="">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">品項名稱 *</label>
-                    <input type="text" id="formItemName" required class="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-700 dark:text-white">
-                </div>
+                
                 <div class="flex gap-4">
                     <div class="flex-1">
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">所屬分類 *</label>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">品項名稱 *</label>
+                        <input type="text" id="formItemName" required class="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-700 dark:text-white">
+                    </div>
+                    <div class="w-20">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">顏色</label>
+                        <input type="color" id="formItemColor" value="#1f2937" class="w-full h-10 border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer bg-white dark:bg-gray-700 p-1">
+                    </div>
+                </div>
+                
+                <div class="flex gap-4">
+                    <div class="flex-1">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">主分類 *</label>
                         <select id="formItemCategory" required class="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-700 dark:text-white">
                             <!-- 動態生成選項 -->
                         </select>
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">顯示顏色</label>
-                        <input type="color" id="formItemColor" value="#1f2937" class="w-14 h-10 border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer bg-white dark:bg-gray-700 p-1">
+                    <div class="flex-1">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">次分類 (選填)</label>
+                        <input type="text" id="formItemSubCategory" list="subCategoryList" placeholder="如: 飲料耗材" class="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none dark:bg-gray-700 dark:text-white">
+                        <datalist id="subCategoryList">
+                            <!-- 動態生成歷史輸入過的次分類 -->
+                        </datalist>
                     </div>
                 </div>
+
                 <div class="pt-4 flex gap-3">
                     <button type="button" id="cancelItemFormBtn" class="flex-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 py-2 rounded-lg font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">取消</button>
                     <button type="submit" class="flex-1 bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors" id="submitItemFormBtn">確認</button>
@@ -499,6 +511,8 @@
             editItemId: document.getElementById('editItemId'),
             formItemName: document.getElementById('formItemName'),
             formItemCategory: document.getElementById('formItemCategory'),
+            formItemSubCategory: document.getElementById('formItemSubCategory'),
+            subCategoryList: document.getElementById('subCategoryList'),
             formItemColor: document.getElementById('formItemColor'),
             submitItemFormBtn: document.getElementById('submitItemFormBtn'),
             closeItemFormBtn: document.getElementById('closeItemFormBtn'),
@@ -712,8 +726,16 @@
                 DOM.editItemId.value = '';
                 DOM.itemFormTitle.innerText = '快速新增品項';
                 DOM.submitItemFormBtn.innerText = '確認新增';
+                
+                // 動態生成下拉選單
                 DOM.formItemCategory.innerHTML = state.categories.map(cat => `<option value="${cat}">${cat}</option>`).join('');
                 if(state.activeTab !== '全部') DOM.formItemCategory.value = state.activeTab;
+                
+                // 動態生成次分類提示清單
+                const uniqueSubCats = [...new Set(state.items.map(i => i.subCategory).filter(Boolean))];
+                DOM.subCategoryList.innerHTML = uniqueSubCats.map(sub => `<option value="${sub}">`).join('');
+                
+                DOM.formItemSubCategory.value = '';
                 DOM.formItemColor.value = state.isDarkMode ? '#ffffff' : '#1f2937';
                 DOM.itemFormModal.showModal();
             });
@@ -726,6 +748,7 @@
                 const id = DOM.editItemId.value;
                 const name = DOM.formItemName.value.trim();
                 const category = DOM.formItemCategory.value;
+                const subCategory = DOM.formItemSubCategory.value.trim();
                 const color = DOM.formItemColor.value;
                 if (!name) return;
 
@@ -734,13 +757,14 @@
                     if(itemIndex > -1) {
                         state.items[itemIndex].name = name;
                         state.items[itemIndex].category = category;
+                        state.items[itemIndex].subCategory = subCategory;
                         state.items[itemIndex].color = color;
                         showToast('品項修改成功！');
                     }
                 } else {
                     state.items.push({
                         id: 'item_' + Date.now(),
-                        name: name, category: category, color: color, createdAt: Date.now()
+                        name: name, category: category, subCategory: subCategory, color: color, createdAt: Date.now()
                     });
                     showToast('品項新增成功！');
                     if (state.activeTab !== '全部' && state.activeTab !== category) state.activeTab = category;
@@ -813,8 +837,15 @@
             if (!item) return;
             DOM.itemForm.reset();
             DOM.editItemId.value = item.id; DOM.itemFormTitle.innerText = '編輯品項設定'; DOM.submitItemFormBtn.innerText = '儲存修改';
+            
             DOM.formItemCategory.innerHTML = state.categories.map(cat => `<option value="${cat}">${cat}</option>`).join('');
-            DOM.formItemName.value = item.name; DOM.formItemCategory.value = item.category; DOM.formItemColor.value = item.color || (state.isDarkMode ? '#ffffff' : '#1f2937');
+            const uniqueSubCats = [...new Set(state.items.map(i => i.subCategory).filter(Boolean))];
+            DOM.subCategoryList.innerHTML = uniqueSubCats.map(sub => `<option value="${sub}">`).join('');
+            
+            DOM.formItemName.value = item.name; 
+            DOM.formItemCategory.value = item.category; 
+            DOM.formItemSubCategory.value = item.subCategory || '';
+            DOM.formItemColor.value = item.color || (state.isDarkMode ? '#ffffff' : '#1f2937');
             DOM.itemFormModal.showModal();
         };
 
@@ -923,13 +954,24 @@
                 const workbook = new ExcelJS.Workbook();
                 const worksheet = workbook.addWorksheet('訂購單');
                 worksheet.columns = [
+                    { header: '主分類', key: 'cat', width: 15, style: { alignment: { horizontal: 'center', vertical: 'middle' } } },
+                    { header: '次分類', key: 'subCat', width: 20, style: { alignment: { horizontal: 'center', vertical: 'middle' } } },
                     { header: '品項名稱', key: 'name', width: 40, style: { alignment: { horizontal: 'left', vertical: 'middle' } } },
                     { header: '訂購數量', key: 'qty', width: 15, style: { alignment: { horizontal: 'center', vertical: 'middle' } } }
                 ];
                 const headerRow = worksheet.getRow(1);
                 headerRow.font = { bold: true, size: 12 }; headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
                 headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
-                orderItems.forEach(item => { worksheet.addRow({ name: item.name, qty: state.orderCounts[item.id] }); });
+                
+                orderItems.forEach(item => { 
+                    worksheet.addRow({ 
+                        cat: item.category,
+                        subCat: item.subCategory || '',
+                        name: item.name, 
+                        qty: state.orderCounts[item.id] 
+                    }); 
+                });
+                
                 worksheet.eachRow({ includeEmpty: false }, function(row, rowNumber) {
                     row.eachCell({ includeEmpty: false }, function(cell, colNumber) {
                         cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
@@ -1016,6 +1058,8 @@
         }
 
         function renderStaffGrid(items) {
+            let lastSubCat = null;
+            
             DOM.itemsGrid.innerHTML = items.map(item => {
                 const hasFrontCount = state.counts.hasOwnProperty(`${item.id}_front`);
                 const hasWarehouseCount = state.counts.hasOwnProperty(`${item.id}_warehouse`);
@@ -1023,7 +1067,29 @@
                 const warehouseQty = hasWarehouseCount ? state.counts[`${item.id}_warehouse`] : 0;
                 const nameColor = item.color || (state.isDarkMode ? '#ffffff' : '#1f2937');
 
-                return `
+                let headerHtml = '';
+                const currentSubCat = item.subCategory || '';
+                
+                // 次分類群組標題判斷
+                if (currentSubCat !== lastSubCat) {
+                    if (currentSubCat) {
+                        headerHtml = `
+                        <div class="mt-4 mb-2 pb-1 border-b-2 border-indigo-200 dark:border-indigo-800/60 flex items-center gap-2 px-1">
+                            <i class="fa-solid fa-layer-group text-indigo-500"></i>
+                            <h4 class="text-lg font-bold text-indigo-700 dark:text-indigo-400">${currentSubCat}</h4>
+                        </div>`;
+                    } else if (lastSubCat !== null) {
+                        // 如果上一個有次分類，但目前這個沒有，顯示「其他」區隔
+                        headerHtml = `
+                        <div class="mt-4 mb-2 pb-1 border-b-2 border-gray-200 dark:border-gray-700 flex items-center gap-2 px-1">
+                            <i class="fa-solid fa-folder-minus text-gray-400"></i>
+                            <h4 class="text-lg font-bold text-gray-500 dark:text-gray-400">其他 (未設定次分類)</h4>
+                        </div>`;
+                    }
+                    lastSubCat = currentSubCat;
+                }
+
+                const itemHtml = `
                 <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-3 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                     <div class="flex items-center gap-3 w-full md:w-auto">
                         <span class="text-xs font-semibold px-2 py-1 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 whitespace-nowrap border border-blue-100 dark:border-blue-800/50">${item.category}</span>
@@ -1050,6 +1116,8 @@
                         </div>
                     </div>
                 </div>`;
+                
+                return headerHtml + itemHtml;
             }).join('');
         }
 
@@ -1060,11 +1128,18 @@
                 const totalQty = frontQty + warehouseQty;
                 const orderQty = state.orderCounts[item.id] !== undefined ? state.orderCounts[item.id] : '';
                 const nameColor = item.color || (state.isDarkMode ? '#ffffff' : '#1f2937');
+                
+                const subCatBadge = item.subCategory ? `<span class="mt-1 px-2 inline-flex text-[10px] leading-4 font-semibold rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-700">${item.subCategory}</span>` : '';
 
                 return `
                 <tr data-id="${item.id}" draggable="true" ondragstart="window.appItemDragStart(event, '${item.id}')" ondragend="window.appItemDragEnd(event)" ondragover="window.appItemDragOver(event)" ondragenter="window.appItemDragEnter(event)" ondragleave="window.appItemDragLeave(event)" ondrop="window.appItemDrop(event, '${item.id}')" class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-move">
                     <td class="px-6 py-4 whitespace-nowrap text-gray-400 dark:text-gray-500"><i class="fa-solid fa-grip-vertical"></i></td>
-                    <td class="px-6 py-4 whitespace-nowrap pointer-events-none w-24"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400">${item.category}</span></td>
+                    <td class="px-6 py-4 whitespace-nowrap pointer-events-none align-middle">
+                        <div class="flex flex-col items-start gap-1">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400">${item.category}</span>
+                            ${subCatBadge}
+                        </div>
+                    </td>
                     <td class="px-6 py-4 whitespace-nowrap pointer-events-none"><div class="text-base sm:text-lg font-bold" style="color: ${nameColor}">${item.name}</div></td>
                     <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-700 dark:text-gray-300 pointer-events-none">${frontQty}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-700 dark:text-gray-300 pointer-events-none">${warehouseQty}</td>
