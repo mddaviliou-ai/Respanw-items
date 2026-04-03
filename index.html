@@ -6,7 +6,7 @@
     <!-- 加入網頁描述與 SEO 設定 -->
     <meta name="description" content="這是一個即時庫存盤點系統，支援多人協作、分區盤點（前台與倉庫），並提供管理員總覽、歷史紀錄與分類管理功能。">
     <meta property="og:title" content="即時庫存盤點系統">
-    <meta property="og:image" content="logo3.png">
+    <meta property="og:image" content="logo4.png">
     
     <title>即時庫存盤點系統</title>
     <!-- Tailwind CSS -->
@@ -168,7 +168,7 @@
         </div>
     </main>
 
-    <!-- 懸浮新增按鈕 (FAB) -->
+    <!-- 懸浮新增按鈕 (FAB) (預設隱藏，僅管理員可見) -->
     <button id="fabAddBtn" class="fixed bottom-6 right-6 bg-blue-600 text-white w-14 h-14 rounded-full shadow-lg hover:bg-blue-700 hover:scale-105 transition-transform flex items-center justify-center text-2xl z-40 hidden">
         <i class="fa-solid fa-plus"></i>
     </button>
@@ -178,13 +178,18 @@
         <div class="bg-white dark:bg-gray-800 rounded-3xl overflow-hidden shadow-2xl border border-gray-100 dark:border-gray-700">
             <div class="bg-blue-600 px-6 py-6 flex flex-col items-center justify-center gap-3 text-white">
                 <i class="fa-solid fa-shield-halved text-4xl"></i>
-                <h3 class="font-bold text-xl tracking-widest">系統安全驗證</h3>
+                <h3 class="font-bold text-xl tracking-widest">系統登入</h3>
             </div>
             <form id="siteLoginForm" class="p-8 space-y-6 text-center">
-                <p class="text-sm text-gray-500 dark:text-gray-400">請輸入專屬存取密碼以進入庫存系統</p>
-                <div>
-                    <input type="password" id="sitePasswordInput" required placeholder="請輸入密碼" class="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:outline-none text-center tracking-widest text-lg bg-gray-50 dark:bg-gray-700 dark:text-white transition-colors">
-                    <p id="sitePasswordError" class="text-red-500 dark:text-red-400 text-sm mt-3 hidden"><i class="fa-solid fa-circle-exclamation"></i> 密碼錯誤，請重新輸入</p>
+                <p class="text-sm text-gray-500 dark:text-gray-400">請輸入您的姓名與專屬存取密碼</p>
+                <div class="space-y-4">
+                    <div>
+                        <input type="text" id="siteStaffNameInput" required placeholder="您的姓名或代號" class="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:outline-none text-center text-lg bg-gray-50 dark:bg-gray-700 dark:text-white transition-colors">
+                    </div>
+                    <div>
+                        <input type="password" id="sitePasswordInput" required placeholder="系統存取密碼" class="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:outline-none text-center tracking-widest text-lg bg-gray-50 dark:bg-gray-700 dark:text-white transition-colors">
+                        <p id="sitePasswordError" class="text-red-500 dark:text-red-400 text-sm mt-3 hidden"><i class="fa-solid fa-circle-exclamation"></i> 密碼錯誤，請重新輸入</p>
+                    </div>
                 </div>
                 <div class="pt-2">
                     <button type="submit" class="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold text-lg hover:bg-blue-700 transition-colors shadow-md hover:shadow-lg">驗證並進入</button>
@@ -389,6 +394,7 @@
         // 應用狀態
         const state = {
             role: 'staff',
+            staffName: '', // 儲存當前操作人員姓名
             items: [],
             counts: {},
             orderCounts: {}, 
@@ -420,6 +426,7 @@
             
             siteLoginModal: document.getElementById('siteLoginModal'),
             siteLoginForm: document.getElementById('siteLoginForm'),
+            siteStaffNameInput: document.getElementById('siteStaffNameInput'),
             sitePasswordInput: document.getElementById('sitePasswordInput'),
             sitePasswordError: document.getElementById('sitePasswordError'),
 
@@ -531,11 +538,15 @@
         }
 
         function setupEventListeners() {
-            // 網站首次進入密碼驗證
+            // 網站首次進入密碼與人員名稱驗證
             DOM.siteLoginForm.addEventListener('submit', (e) => {
                 e.preventDefault();
                 if (DOM.sitePasswordInput.value === SITE_ACCESS_PASSWORD) {
+                    const staffName = DOM.siteStaffNameInput.value.trim() || '未知人員';
                     localStorage.setItem('site_access_granted', 'true');
+                    localStorage.setItem('inv_staff_name', staffName);
+                    state.staffName = staffName;
+                    
                     DOM.siteLoginModal.close();
                     DOM.loadingState.classList.remove('hidden');
                     initApp(); // 密碼正確才啟動應用與連線
@@ -789,11 +800,15 @@
                     const diffText = record.diff > 0 ? `+${record.diff}` : record.diff;
                     const diffColor = record.diff > 0 ? 'text-green-500' : (record.diff < 0 ? 'text-red-500' : 'text-gray-500');
                     const locationText = record.location === 'front' ? '前台' : '倉庫';
+                    const operatorName = record.staffName || '未知人員'; // 顯示操作人員名稱
                     return `
                     <li class="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <div class="flex items-center gap-3">
                             <div class="bg-gray-100 dark:bg-gray-700 p-2 rounded-lg text-gray-500 dark:text-gray-400"><i class="fa-solid fa-boxes-packing"></i></div>
-                            <div><p class="text-sm font-bold text-gray-800 dark:text-gray-200">更新了 ${locationText} 數量</p><p class="text-xs text-gray-500 dark:text-gray-400">${record.timestamp}</p></div>
+                            <div>
+                                <p class="text-sm font-bold text-gray-800 dark:text-gray-200">更新了 ${locationText} 數量</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">${record.timestamp} · <span class="font-medium text-indigo-500 dark:text-indigo-400"><i class="fa-solid fa-user-pen"></i> ${operatorName}</span></p>
+                            </div>
                         </div>
                         <div class="flex items-center gap-4 bg-gray-50 dark:bg-gray-900/50 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 shrink-0">
                             <div class="text-sm text-gray-600 dark:text-gray-300">${record.oldQty} <i class="fa-solid fa-arrow-right text-gray-400 text-xs mx-1"></i> ${record.newQty}</div>
@@ -834,11 +849,13 @@
 
             const countKey = `${itemId}_${location}`;
             const oldQty = state.counts[countKey] || 0;
+            
             if (oldQty !== newQty) {
                 state.history.push({
                     id: Date.now().toString(), itemId: itemId, location: location,
                     oldQty: oldQty, newQty: newQty, diff: newQty - oldQty,
-                    timestamp: getFormattedDate(), timestampMs: Date.now()
+                    timestamp: getFormattedDate(), timestampMs: Date.now(),
+                    staffName: state.staffName || '未知人員' // 紀錄操作人員姓名
                 });
             }
 
@@ -916,11 +933,15 @@
             if (role === 'admin') {
                 DOM.roleIcon.className = "fa-solid fa-user-tie"; DOM.itemsGrid.classList.add('hidden');
                 DOM.adminTableView.classList.remove('hidden'); DOM.changePwdBtn.classList.remove('hidden');
+                DOM.fabAddBtn.classList.remove('hidden'); // 管理員才顯示新增按鈕
             } else {
                 DOM.roleIcon.className = "fa-solid fa-user"; DOM.itemsGrid.classList.remove('hidden');
                 DOM.adminTableView.classList.add('hidden'); DOM.changePwdBtn.classList.add('hidden');
+                DOM.fabAddBtn.classList.add('hidden'); // 盤點員隱藏新增按鈕
             }
-            renderUI();
+            // 不要再呼叫 renderUI()，否則會把 tab 重畫等不必要的操作，且原先有潛在按鈕狀態被覆蓋問題
+            renderTabs();
+            renderItems();
         }
 
         function renderTabs() {
@@ -1024,7 +1045,6 @@
         function renderUI() {
             renderTabs();
             renderItems();
-            DOM.fabAddBtn.classList.remove('hidden');
         }
 
         // ================= 應用啟動 =================
@@ -1073,7 +1093,11 @@
         function checkSiteAccess() {
             setupEventListeners(); 
             
-            if (localStorage.getItem('site_access_granted') === 'true') {
+            const isGranted = localStorage.getItem('site_access_granted') === 'true';
+            const savedName = localStorage.getItem('inv_staff_name');
+
+            if (isGranted && savedName) {
+                state.staffName = savedName; // 恢復上一次的名稱
                 initApp();
             } else {
                 DOM.loadingState.classList.add('hidden');
