@@ -79,6 +79,11 @@
             -moz-appearance: textfield;
         }
 
+        /* 停用雙擊放大，但保留雙指縮放功能 */
+        button, input, select {
+            touch-action: manipulation;
+        }
+
         /* 拖曳時的視覺提示 */
         .drag-over {
             border: 2px dashed #3b82f6 !important;
@@ -1029,7 +1034,7 @@
                             <label class="text-xs font-medium text-gray-500 dark:text-gray-400 pl-1 w-8 shrink-0">前台</label>
                             <div class="flex items-center rounded-md border border-gray-200 dark:border-gray-600 overflow-hidden shrink-0">
                                 <button onclick="window.appAdjustCount('${item.id}', 'front', -1)" class="w-8 h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">-</button>
-                                <input type="number" min="0" value="${frontQty}" id="input_front_${item.id}" class="w-12 h-8 text-center border-0 focus:ring-0 p-0 text-sm font-bold bg-white dark:bg-gray-700 dark:text-white hide-arrows">
+                                <input type="number" min="0" value="${frontQty}" id="input_front_${item.id}" class="w-12 h-8 text-center border-0 focus:ring-0 p-0 text-base font-bold bg-white dark:bg-gray-700 dark:text-white hide-arrows">
                                 <button onclick="window.appAdjustCount('${item.id}', 'front', 1)" class="w-8 h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">+</button>
                             </div>
                             <button id="btn_front_${item.id}" onclick="window.appSaveCount('${item.id}', 'front')" class="${hasFrontCount ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400'} w-14 h-8 rounded-md hover:opacity-80 transition-colors text-xs font-bold whitespace-nowrap shrink-0">${hasFrontCount ? '更新' : '儲存'}</button>
@@ -1038,7 +1043,7 @@
                             <label class="text-xs font-medium text-gray-500 dark:text-gray-400 pl-1 w-8 shrink-0">倉庫</label>
                             <div class="flex items-center rounded-md border border-gray-200 dark:border-gray-600 overflow-hidden shrink-0">
                                 <button onclick="window.appAdjustCount('${item.id}', 'warehouse', -1)" class="w-8 h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">-</button>
-                                <input type="number" min="0" value="${warehouseQty}" id="input_warehouse_${item.id}" class="w-12 h-8 text-center border-0 focus:ring-0 p-0 text-sm font-bold bg-white dark:bg-gray-700 dark:text-white hide-arrows">
+                                <input type="number" min="0" value="${warehouseQty}" id="input_warehouse_${item.id}" class="w-12 h-8 text-center border-0 focus:ring-0 p-0 text-base font-bold bg-white dark:bg-gray-700 dark:text-white hide-arrows">
                                 <button onclick="window.appAdjustCount('${item.id}', 'warehouse', 1)" class="w-8 h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">+</button>
                             </div>
                             <button id="btn_warehouse_${item.id}" onclick="window.appSaveCount('${item.id}', 'warehouse')" class="${hasWarehouseCount ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400'} w-14 h-8 rounded-md hover:opacity-80 transition-colors text-xs font-bold whitespace-nowrap shrink-0">${hasWarehouseCount ? '更新' : '儲存'}</button>
