@@ -1224,50 +1224,101 @@
         };
 
         window.appExportOrder = async function() {
-            const orderItems = state.items.filter(item => state.orderCounts[item.id] > 0);
-            if (orderItems.length === 0) { showToast('目前沒有填寫任何大於0的訂購數量', true); return; }
+            // 1. 篩選出有訂單數量的品項
+            let orderItems = state.items.filter(item => state.orderCounts[item.id] > 0);
+            
+            // 2. 如果目前不是在「全部」分頁，就只匯出當前分類的品項 (單類別匯出)
+            if (state.activeTab !== '全部') {
+                orderItems = orderItems.filter(item => item.category === state.activeTab);
+            }
+
+            if (orderItems.length === 0) { 
+                const msg = state.activeTab === '全部' 
+                    ? '目前沒有填寫任何大於0的訂購數量' 
+                    : `目前的「${state.activeTab}」分類中，沒有填寫任何訂購數量`;
+                showToast(msg, true); 
+                return; 
+            }
             
             try {
                 showToast('正在產生 Excel 檔案...');
                 const workbook = new ExcelJS.Workbook();
                 const worksheet = workbook.addWorksheet('訂購單');
+                
+                // 設定欄位樣式
                 worksheet.columns = [
                     { header: '主分類', key: 'cat', width: 15, style: { alignment: { horizontal: 'center', vertical: 'middle' } } },
                     { header: '次分類', key: 'subCat', width: 20, style: { alignment: { horizontal: 'center', vertical: 'middle' } } },
                     { header: '品項名稱', key: 'name', width: 40, style: { alignment: { horizontal: 'left', vertical: 'middle' } } },
                     { header: '訂購數量', key: 'qty', width: 15, style: { alignment: { horizontal: 'center', vertical: 'middle' } } }
                 ];
+                
                 const headerRow = worksheet.getRow(1);
                 headerRow.font = { bold: true, size: 12 }; headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
                 headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
                 
-                orderItems.forEach(item => { 
-                    worksheet.addRow({ 
-                        cat: item.category,
-                        subCat: item.subCategory || '',
-                        name: item.name, 
-                        qty: state.orderCounts[item.id] 
-                    }); 
+                // 3. 依照次分類分群寫入，並加入空白列間隔
+                const groups = groupItemsBySubCategory(orderItems);
+                groups.forEach((group, index) => {
+                    group.items.forEach(item => { 
+                        worksheet.addRow({ 
+                            cat: item.category,
+                            subCat: item.subCategory || '',
+                            name: item.name, 
+                            qty: state.orderCounts[item.id] 
+                        }); 
+                    });
+                    
+                    // 在不同次分類群組之間加入空白列間隔 (最後一組除外)
+                    if (index < groups.length - 1) {
+                        worksheet.addRow({}); 
+                    }
                 });
                 
-                worksheet.eachRow({ includeEmpty: false }, function(row, rowNumber) {
-                    row.eachCell({ includeEmpty: false }, function(cell, colNumber) {
-                        cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+                // 智慧設定框線 (只針對有資料的列加框線，略過間隔用的空白列)
+                worksheet.eachRow(function(row, rowNumber) {
+                    let hasData = false;
+                    row.eachCell(function(cell) {
+                        if (cell.value !== null && cell.value !== undefined && cell.value !== '') {
+                            hasData = true;
+                        }
                     });
+                    
+                    // 只有標題列(1)和有資料的列才加框線
+                    if (rowNumber === 1 || hasData) {
+                        for (let i = 1; i <= 4; i++) {
+                            row.getCell(i).border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+                        }
+                    }
                 });
+
                 const buffer = await workbook.xlsx.writeBuffer();
                 const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement("a");
-                link.setAttribute("href", url); link.setAttribute("download", `庫存訂購單_${getFormattedDate().replace(/[-: ]/g, '')}.xlsx`);
+                link.setAttribute("href", url); 
+                
+                // 檔名自動加上當前分類名稱
+                const fileNameCategory = state.activeTab === '全部' ? '總表' : state.activeTab;
+                link.setAttribute("download", `庫存訂購單_${fileNameCategory}_${getFormattedDate().replace(/[-: ]/g, '')}.xlsx`);
+                
                 document.body.appendChild(link); link.click(); document.body.removeChild(link);
                 showToast('Excel 訂購單已成功匯出');
+                
                 setTimeout(() => {
-                    if (confirm('匯出成功！是否要「清空」目前的訂購數量，以便準備下次填寫？')) {
-                        state.orderCounts = {}; CloudDB.save(); renderItems();
+                    if (confirm(`匯出成功！是否要「清空」剛才匯出之品項的訂購數量？\n(未匯出的其他分類數量將會保留)`)) {
+                        // 僅清空剛才匯出的品項
+                        orderItems.forEach(item => {
+                            delete state.orderCounts[item.id];
+                        });
+                        CloudDB.save(); 
+                        renderItems();
                     }
                 }, 500);
-            } catch (error) { showToast('匯出失敗，請稍後再試', true); }
+            } catch (error) { 
+                showToast('匯出失敗，請稍後再試', true); 
+                console.error(error);
+            }
         };
 
         window.appDeleteItem = function(itemId, itemName) {
