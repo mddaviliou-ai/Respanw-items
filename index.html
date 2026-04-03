@@ -50,6 +50,12 @@
             border: 2px dashed #3b82f6 !important;
             opacity: 0.7;
         }
+
+        /* 網站進入密碼 Modal 的背景遮罩 */
+        dialog#siteLoginModal::backdrop {
+            background-color: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(8px);
+        }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 dark:bg-gray-900 dark:text-gray-200 font-sans antialiased pb-24 transition-colors duration-200">
@@ -97,7 +103,7 @@
         <!-- 載入中狀態 -->
         <div id="loadingState" class="flex flex-col items-center justify-center py-20">
             <div class="spinner border-blue-500 mb-4"></div>
-            <p class="text-gray-500 dark:text-gray-400 font-medium">載入資料中...</p>
+            <p class="text-gray-500 dark:text-gray-400 font-medium mt-4">連線至雲端資料庫中...</p>
         </div>
 
         <div id="appContent" class="hidden">
@@ -124,7 +130,7 @@
                 <div class="bg-blue-50/50 dark:bg-blue-900/10 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                     <div class="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
                         <i class="fa-solid fa-circle-info"></i>
-                        <span>提示：可直接拖曳表格中的品項列以更改排序位置，排定後將自動同步至盤點人員畫面。</span>
+                        <span>提示：可直接拖曳表格中的品項列以更改排序位置，排定後將自動同步至所有裝置。</span>
                     </div>
                     <!-- 匯出訂購單按鈕 -->
                     <button onclick="window.appExportOrder()" class="shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold py-1.5 px-4 rounded-lg shadow transition-colors flex items-center gap-2">
@@ -166,6 +172,26 @@
     <button id="fabAddBtn" class="fixed bottom-6 right-6 bg-blue-600 text-white w-14 h-14 rounded-full shadow-lg hover:bg-blue-700 hover:scale-105 transition-transform flex items-center justify-center text-2xl z-40 hidden">
         <i class="fa-solid fa-plus"></i>
     </button>
+
+    <!-- 【新增】網站進入密碼 Modal (防護第一線) -->
+    <dialog id="siteLoginModal" class="p-0 rounded-3xl shadow-2xl w-11/12 max-w-sm m-auto fixed inset-0 z-[100] bg-transparent">
+        <div class="bg-white dark:bg-gray-800 rounded-3xl overflow-hidden shadow-2xl border border-gray-100 dark:border-gray-700">
+            <div class="bg-blue-600 px-6 py-6 flex flex-col items-center justify-center gap-3 text-white">
+                <i class="fa-solid fa-shield-halved text-4xl"></i>
+                <h3 class="font-bold text-xl tracking-widest">系統安全驗證</h3>
+            </div>
+            <form id="siteLoginForm" class="p-8 space-y-6 text-center">
+                <p class="text-sm text-gray-500 dark:text-gray-400">請輸入專屬存取密碼以進入庫存系統</p>
+                <div>
+                    <input type="password" id="sitePasswordInput" required placeholder="請輸入密碼" class="w-full border border-gray-300 dark:border-gray-600 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:outline-none text-center tracking-widest text-lg bg-gray-50 dark:bg-gray-700 dark:text-white transition-colors">
+                    <p id="sitePasswordError" class="text-red-500 dark:text-red-400 text-sm mt-3 hidden"><i class="fa-solid fa-circle-exclamation"></i> 密碼錯誤，請重新輸入</p>
+                </div>
+                <div class="pt-2">
+                    <button type="submit" class="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold text-lg hover:bg-blue-700 transition-colors shadow-md hover:shadow-lg">驗證並進入</button>
+                </div>
+            </form>
+        </div>
+    </dialog>
 
     <!-- 密碼輸入 Modal -->
     <dialog id="adminLoginModal" class="p-0 rounded-2xl shadow-2xl backdrop:bg-black backdrop:bg-opacity-50 w-11/12 max-w-sm m-auto dark:bg-gray-800">
@@ -331,19 +357,47 @@
         </div>
     </dialog>
 
-    <script>
+    <!-- Firebase SDK (模組化) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+
+        // =========================================================================
+        // Firebase 專案設定
+        // =========================================================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyDsxK1P2kiopcNzx3c6ywoYBVDGSL-Eczs",
+            authDomain: "respanw-items.firebaseapp.com",
+            projectId: "respanw-items",
+            storageBucket: "respanw-items.firebasestorage.app",
+            messagingSenderId: "300340646385",
+            appId: "1:300340646385:web:af9ff269bc8b9289c8f450",
+            measurementId: "G-6H0JN23NVQ"
+        };
+        // =========================================================================
+
+        const SITE_ACCESS_PASSWORD = "a24713429"; // 全站首次進入密碼
+
+        let db = null;
+        try {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+        } catch(e) {
+            console.error("Firebase 初始化失敗", e);
+        }
+
         // 應用狀態
         const state = {
             role: 'staff',
             items: [],
             counts: {},
-            orderCounts: {}, // 儲存訂購數量
-            history: [], // 盤點歷史紀錄陣列
+            orderCounts: {}, 
+            history: [], 
             categories: ['飲品', '食品', '耗材', '包裝', '其他'],
             activeTab: '全部',
             searchQuery: '',
             itemToDelete: null,
-            currentHistoryItemId: null, // 暫存當前查看歷史紀錄的品項 ID
+            currentHistoryItemId: null,
             isDarkMode: false
         };
 
@@ -364,6 +418,11 @@
             darkModeToggle: document.getElementById('darkModeToggle'),
             darkModeIcon: document.getElementById('darkModeIcon'),
             
+            siteLoginModal: document.getElementById('siteLoginModal'),
+            siteLoginForm: document.getElementById('siteLoginForm'),
+            sitePasswordInput: document.getElementById('sitePasswordInput'),
+            sitePasswordError: document.getElementById('sitePasswordError'),
+
             adminLoginModal: document.getElementById('adminLoginModal'),
             adminLoginForm: document.getElementById('adminLoginForm'),
             adminPassword: document.getElementById('adminPassword'),
@@ -413,49 +472,30 @@
             toastContainer: document.getElementById('toastContainer')
         };
 
-        // 本地資料儲存控制器
-        const LocalDB = {
-            load: () => {
-                const storedItems = localStorage.getItem('inv_items');
-                const storedCounts = localStorage.getItem('inv_counts');
-                const storedOrders = localStorage.getItem('inv_order_counts');
-                const storedHistory = localStorage.getItem('inv_history');
-                const storedCategories = localStorage.getItem('inv_categories');
-                
-                if (storedItems) state.items = JSON.parse(storedItems);
-                if (storedCounts) state.counts = JSON.parse(storedCounts);
-                if (storedOrders) state.orderCounts = JSON.parse(storedOrders);
-                if (storedHistory) state.history = JSON.parse(storedHistory);
-                
-                if (storedCategories) {
-                    state.categories = JSON.parse(storedCategories);
-                } else {
-                    LocalDB.saveCategories();
+        // 雲端資料儲存控制器
+        const CloudDB = {
+            save: async () => {
+                if (!db) return;
+                try {
+                    const docRef = doc(db, "inventory", "main_state");
+                    await setDoc(docRef, {
+                        items: state.items,
+                        counts: state.counts,
+                        orderCounts: state.orderCounts,
+                        history: state.history,
+                        categories: state.categories
+                    });
+                } catch (e) {
+                    console.error("寫入資料庫失敗", e);
+                    showToast("儲存失敗，請檢查網路", true);
                 }
-
-                // 載入深色模式設定
-                const storedDarkMode = localStorage.getItem('inv_darkmode');
-                if (storedDarkMode !== null) {
-                    state.isDarkMode = storedDarkMode === 'true';
-                } else {
-                    state.isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                }
-                applyDarkMode();
             },
-            save: () => {
-                localStorage.setItem('inv_items', JSON.stringify(state.items));
-                localStorage.setItem('inv_counts', JSON.stringify(state.counts));
-                localStorage.setItem('inv_order_counts', JSON.stringify(state.orderCounts));
-                localStorage.setItem('inv_history', JSON.stringify(state.history));
-            },
-            saveCategories: () => {
-                localStorage.setItem('inv_categories', JSON.stringify(state.categories));
-            },
+            saveCategories: () => { CloudDB.save(); },
             getAdminPassword: () => localStorage.getItem('inv_admin_pwd') || '1234',
             setAdminPassword: (pwd) => localStorage.setItem('inv_admin_pwd', pwd)
         };
 
-        // 格式化時間輔助函數 (加入秒數)
+        // 格式化時間
         function getFormattedDate(date = new Date()) {
             const yyyy = date.getFullYear();
             const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -466,7 +506,6 @@
             return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
         }
 
-        // 顯示訊息 Toast
         function showToast(message, isError = false) {
             const toast = document.createElement('div');
             toast.className = `px-4 py-2 rounded-lg shadow-lg text-sm font-medium text-white transform transition-all duration-300 translate-y-[-100%] opacity-0 flex items-center gap-2 z-50 ${isError ? 'bg-red-600' : 'bg-green-600'}`;
@@ -480,7 +519,6 @@
             }, 3000);
         }
 
-        // 深色模式控制
         function applyDarkMode() {
             if (state.isDarkMode) {
                 document.documentElement.classList.add('dark');
@@ -492,15 +530,31 @@
             localStorage.setItem('inv_darkmode', state.isDarkMode);
         }
 
-        // 綁定事件監聽器
         function setupEventListeners() {
-            // 深色模式切換
+            // 網站首次進入密碼驗證
+            DOM.siteLoginForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                if (DOM.sitePasswordInput.value === SITE_ACCESS_PASSWORD) {
+                    localStorage.setItem('site_access_granted', 'true');
+                    DOM.siteLoginModal.close();
+                    DOM.loadingState.classList.remove('hidden');
+                    initApp(); // 密碼正確才啟動應用與連線
+                } else {
+                    DOM.sitePasswordError.classList.remove('hidden');
+                    DOM.sitePasswordInput.value = '';
+                }
+            });
+
+            // 防止用 ESC 關閉驗證視窗
+            DOM.siteLoginModal.addEventListener('cancel', (e) => {
+                e.preventDefault();
+            });
+
             DOM.darkModeToggle.addEventListener('click', () => {
                 state.isDarkMode = !state.isDarkMode;
                 applyDarkMode();
             });
 
-            // Logo 連點三下重置密碼
             let clickCount = 0;
             let clickTimer;
             DOM.logoContainer.addEventListener('click', () => {
@@ -510,17 +564,14 @@
                     clickCount = 0;
                     const input = prompt("請輸入指令以重置密碼：");
                     if (input === 'admin') {
-                        LocalDB.setAdminPassword('1234');
+                        CloudDB.setAdminPassword('1234');
                         showToast('管理密碼已重置為預設 (1234)');
-                    } else if (input !== null) {
-                        showToast('指令錯誤，重置失敗', true);
                     }
                 } else {
                     clickTimer = setTimeout(() => { clickCount = 0; }, 800);
                 }
             });
 
-            // 角色切換
             DOM.roleSelector.addEventListener('change', (e) => {
                 if (e.target.value === 'admin') {
                     e.target.value = 'staff'; 
@@ -532,11 +583,10 @@
                 }
             });
 
-            // 登入相關邏輯
             DOM.cancelLoginBtn.addEventListener('click', () => DOM.adminLoginModal.close());
             DOM.adminLoginForm.addEventListener('submit', (e) => {
                 e.preventDefault();
-                if (DOM.adminPassword.value === LocalDB.getAdminPassword()) {
+                if (DOM.adminPassword.value === CloudDB.getAdminPassword()) {
                     DOM.adminLoginModal.close();
                     setRole('admin');
                     showToast('登入設定管理成功');
@@ -546,7 +596,6 @@
                 }
             });
 
-            // 修改密碼邏輯
             DOM.changePwdBtn.addEventListener('click', () => {
                 DOM.newAdminPassword.value = '';
                 DOM.changePwdModal.showModal();
@@ -556,25 +605,23 @@
                 e.preventDefault();
                 const newPwd = DOM.newAdminPassword.value.trim();
                 if(newPwd) {
-                    LocalDB.setAdminPassword(newPwd);
+                    CloudDB.setAdminPassword(newPwd);
                     showToast('密碼修改成功');
                     DOM.changePwdModal.close();
                 }
             });
 
-            // 搜尋
             DOM.searchInput.addEventListener('input', (e) => {
                 state.searchQuery = e.target.value.toLowerCase();
                 renderItems();
             });
 
-            // 分類管理 Modal 邏輯
             DOM.closeCategoryModalBtn.addEventListener('click', () => DOM.categoryManageModal.close());
             DOM.addCategoryBtn.addEventListener('click', () => {
                 const newCat = DOM.newCategoryInput.value.trim();
                 if (newCat && !state.categories.includes(newCat)) {
                     state.categories.push(newCat);
-                    LocalDB.saveCategories();
+                    CloudDB.saveCategories();
                     DOM.newCategoryInput.value = '';
                     renderCategoryManager();
                     renderTabs();
@@ -584,7 +631,6 @@
                 }
             });
 
-            // 重新命名分類 Modal 邏輯
             DOM.cancelRenameCategoryBtn.addEventListener('click', () => DOM.renameCategoryModal.close());
             DOM.renameCategoryForm.addEventListener('submit', (e) => {
                 e.preventDefault();
@@ -593,31 +639,14 @@
 
                 if (newCat && newCat !== oldCat) {
                     if (state.categories.includes(newCat)) {
-                        showToast('此分類名稱已存在！', true);
-                        return;
+                        showToast('此分類名稱已存在！', true); return;
                     }
-
-                    // 1. 更新分類陣列中的名稱
                     const catIndex = state.categories.indexOf(oldCat);
-                    if (catIndex > -1) {
-                        state.categories[catIndex] = newCat;
-                    }
+                    if (catIndex > -1) state.categories[catIndex] = newCat;
+                    state.items.forEach(item => { if (item.category === oldCat) item.category = newCat; });
+                    if (state.activeTab === oldCat) state.activeTab = newCat;
 
-                    // 2. 同步更新所有屬於該分類的品項
-                    state.items.forEach(item => {
-                        if (item.category === oldCat) {
-                            item.category = newCat;
-                        }
-                    });
-
-                    // 3. 更新當前選擇的 Tab
-                    if (state.activeTab === oldCat) {
-                        state.activeTab = newCat;
-                    }
-
-                    LocalDB.saveCategories();
-                    LocalDB.save();
-
+                    CloudDB.save();
                     DOM.renameCategoryModal.close();
                     renderCategoryManager();
                     renderTabs();
@@ -628,23 +657,13 @@
                 }
             });
 
-            // 新增/編輯品項 Modal 邏輯
             DOM.fabAddBtn.addEventListener('click', () => {
                 DOM.itemForm.reset();
                 DOM.editItemId.value = '';
                 DOM.itemFormTitle.innerText = '快速新增品項';
                 DOM.submitItemFormBtn.innerText = '確認新增';
-                
-                // 動態生成下拉選單
-                DOM.formItemCategory.innerHTML = state.categories.map(cat => 
-                    `<option value="${cat}">${cat}</option>`
-                ).join('');
-                
-                // 自動帶入當前分類
-                if(state.activeTab !== '全部') {
-                    DOM.formItemCategory.value = state.activeTab;
-                }
-                
+                DOM.formItemCategory.innerHTML = state.categories.map(cat => `<option value="${cat}">${cat}</option>`).join('');
+                if(state.activeTab !== '全部') DOM.formItemCategory.value = state.activeTab;
                 DOM.formItemColor.value = state.isDarkMode ? '#ffffff' : '#1f2937';
                 DOM.itemFormModal.showModal();
             });
@@ -652,7 +671,6 @@
             DOM.closeItemFormBtn.addEventListener('click', () => DOM.itemFormModal.close());
             DOM.cancelItemFormBtn.addEventListener('click', () => DOM.itemFormModal.close());
 
-            // 處理新增/編輯品項表單提交
             DOM.itemForm.addEventListener('submit', (e) => {
                 e.preventDefault();
                 const id = DOM.editItemId.value;
@@ -662,7 +680,6 @@
                 if (!name) return;
 
                 if (id) {
-                    // 編輯模式
                     const itemIndex = state.items.findIndex(i => i.id === id);
                     if(itemIndex > -1) {
                         state.items[itemIndex].name = name;
@@ -671,693 +688,400 @@
                         showToast('品項修改成功！');
                     }
                 } else {
-                    // 新增模式
-                    const newItem = {
+                    state.items.push({
                         id: 'item_' + Date.now(),
-                        name: name,
-                        category: category,
-                        color: color,
-                        createdAt: Date.now()
-                    };
-                    state.items.push(newItem);
+                        name: name, category: category, color: color, createdAt: Date.now()
+                    });
                     showToast('品項新增成功！');
-                    
-                    if (state.activeTab !== '全部' && state.activeTab !== category) {
-                        state.activeTab = category;
-                    }
+                    if (state.activeTab !== '全部' && state.activeTab !== category) state.activeTab = category;
                 }
-
-                LocalDB.save();
+                CloudDB.save();
                 DOM.itemFormModal.close();
                 renderUI();
             });
 
-            // 刪除確認 Modal 邏輯
             DOM.cancelDeleteBtn.addEventListener('click', () => DOM.deleteConfirmModal.close());
             DOM.confirmDeleteBtn.addEventListener('click', () => {
                 if (!state.itemToDelete) return;
-                
                 state.items = state.items.filter(i => i.id !== state.itemToDelete);
                 delete state.counts[`${state.itemToDelete}_front`];
                 delete state.counts[`${state.itemToDelete}_warehouse`];
-                delete state.orderCounts[state.itemToDelete]; // 同步刪除訂購數量
-                // 同時清理歷史紀錄
+                delete state.orderCounts[state.itemToDelete];
                 state.history = state.history.filter(h => h.itemId !== state.itemToDelete);
                 
-                LocalDB.save();
+                CloudDB.save();
                 showToast('品項已刪除');
                 DOM.deleteConfirmModal.close();
                 renderUI();
             });
 
-            // 歷史紀錄 Modal
             DOM.closeHistoryModalBtn.addEventListener('click', () => DOM.historyModal.close());
-
-            // 跨分頁同步
-            window.addEventListener('storage', (e) => {
-                if (['inv_items', 'inv_counts', 'inv_categories', 'inv_history', 'inv_order_counts'].includes(e.key)) {
-                    LocalDB.load();
-                    renderUI();
-                }
-            });
         }
 
-        // ================= 品項拖曳排序功能 (管理員表格用) =================
+        // ================= 將全域函數掛載到 window，供 HTML onclick 使用 =================
         let draggedItemId = null;
-
-        window.appItemDragStart = function(e, id) {
-            draggedItemId = id;
-            e.dataTransfer.effectAllowed = 'move';
-            setTimeout(() => e.target.classList.add('opacity-50'), 0);
-        }
-
-        window.appItemDragEnd = function(e) {
-            e.target.classList.remove('opacity-50');
-            document.querySelectorAll('tr').forEach(el => el.classList.remove('bg-blue-50', 'dark:bg-blue-900/50'));
-        }
-
-        window.appItemDragOver = function(e) {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-        }
-
-        window.appItemDragEnter = function(e) {
-            e.preventDefault();
-            const tr = e.target.closest('tr');
-            if (tr && draggedItemId && tr.getAttribute('data-id') !== draggedItemId) {
-                tr.classList.add('bg-blue-50', 'dark:bg-blue-900/50');
-            }
-        }
-
-        window.appItemDragLeave = function(e) {
-            const tr = e.target.closest('tr');
-            if (tr && (!e.relatedTarget || !tr.contains(e.relatedTarget))) {
-                tr.classList.remove('bg-blue-50', 'dark:bg-blue-900/50');
-            }
-        }
-
+        window.appItemDragStart = function(e, id) { draggedItemId = id; e.dataTransfer.effectAllowed = 'move'; setTimeout(() => e.target.classList.add('opacity-50'), 0); }
+        window.appItemDragEnd = function(e) { e.target.classList.remove('opacity-50'); document.querySelectorAll('tr').forEach(el => el.classList.remove('bg-blue-50', 'dark:bg-blue-900/50')); }
+        window.appItemDragOver = function(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+        window.appItemDragEnter = function(e) { e.preventDefault(); const tr = e.target.closest('tr'); if (tr && draggedItemId && tr.getAttribute('data-id') !== draggedItemId) tr.classList.add('bg-blue-50', 'dark:bg-blue-900/50'); }
+        window.appItemDragLeave = function(e) { const tr = e.target.closest('tr'); if (tr && (!e.relatedTarget || !tr.contains(e.relatedTarget))) tr.classList.remove('bg-blue-50', 'dark:bg-blue-900/50'); }
         window.appItemDrop = function(e, targetId) {
-            e.preventDefault();
-            const tr = e.target.closest('tr');
-            if (tr) tr.classList.remove('bg-blue-50', 'dark:bg-blue-900/50');
-            
+            e.preventDefault(); const tr = e.target.closest('tr'); if (tr) tr.classList.remove('bg-blue-50', 'dark:bg-blue-900/50');
             if (!draggedItemId || draggedItemId === targetId) return;
-
             const fromIdx = state.items.findIndex(i => i.id === draggedItemId);
             const toIdx = state.items.findIndex(i => i.id === targetId);
-            
             if (fromIdx > -1 && toIdx > -1) {
-                // 將元素從原位置移除，並插入到新目標的位置
                 const [movedItem] = state.items.splice(fromIdx, 1);
                 state.items.splice(toIdx, 0, movedItem);
-                
-                LocalDB.save();
-                renderItems();
+                CloudDB.save(); renderItems();
             }
         }
 
-        // ================= 分類標籤拖曳排序功能 =================
         let draggedCategory = null;
-
-        window.appDragStart = function(e, cat) {
-            draggedCategory = cat;
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', cat); // Required for Firefox
-            setTimeout(() => e.target.classList.add('opacity-50'), 0);
-        }
-
-        window.appDragEnd = function(e) {
-            e.target.classList.remove('opacity-50');
-            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-        }
-
-        window.appDragOver = function(e) {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-        }
-
-        window.appDragEnter = function(e) {
-            e.preventDefault();
-            if (e.target.tagName === 'BUTTON' && e.target.innerText !== '全部' && e.target.innerText !== draggedCategory) {
-                e.target.classList.add('drag-over');
-            }
-        }
-
-        window.appDragLeave = function(e) {
-            e.target.classList.remove('drag-over');
-        }
-
+        window.appDragStart = function(e, cat) { draggedCategory = cat; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', cat); setTimeout(() => e.target.classList.add('opacity-50'), 0); }
+        window.appDragEnd = function(e) { e.target.classList.remove('opacity-50'); document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); }
+        window.appDragOver = function(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+        window.appDragEnter = function(e) { e.preventDefault(); if (e.target.tagName === 'BUTTON' && e.target.innerText !== '全部' && e.target.innerText !== draggedCategory) e.target.classList.add('drag-over'); }
+        window.appDragLeave = function(e) { e.target.classList.remove('drag-over'); }
         window.appDrop = function(e, targetCat) {
-            e.preventDefault();
-            e.target.classList.remove('drag-over');
-            
+            e.preventDefault(); e.target.classList.remove('drag-over');
             if (!draggedCategory || draggedCategory === targetCat || targetCat === '全部') return;
-
             const fromIdx = state.categories.indexOf(draggedCategory);
             const toIdx = state.categories.indexOf(targetCat);
-            
             if (fromIdx > -1 && toIdx > -1) {
-                // 移動陣列元素
-                state.categories.splice(fromIdx, 1);
-                state.categories.splice(toIdx, 0, draggedCategory);
-                
-                LocalDB.saveCategories();
-                renderTabs();
+                state.categories.splice(fromIdx, 1); state.categories.splice(toIdx, 0, draggedCategory);
+                CloudDB.saveCategories(); renderTabs();
             }
         }
 
-        // 觸發編輯分類名稱
         window.appEditCategory = function(oldCat) {
-            DOM.oldCategoryName.value = oldCat;
-            DOM.newCategoryNameInput.value = oldCat;
-            DOM.renameCategoryModal.showModal();
+            DOM.oldCategoryName.value = oldCat; DOM.newCategoryNameInput.value = oldCat; DOM.renameCategoryModal.showModal();
         };
 
-        // 編輯品項 (全域綁定)
         window.appEditItem = function(itemId) {
             const item = state.items.find(i => i.id === itemId);
             if (!item) return;
-
             DOM.itemForm.reset();
-            DOM.editItemId.value = item.id;
-            DOM.itemFormTitle.innerText = '編輯品項設定';
-            DOM.submitItemFormBtn.innerText = '儲存修改';
-            
-            // 重新生成選項確保最新
-            DOM.formItemCategory.innerHTML = state.categories.map(cat => 
-                `<option value="${cat}">${cat}</option>`
-            ).join('');
-
-            DOM.formItemName.value = item.name;
-            DOM.formItemCategory.value = item.category;
-            DOM.formItemColor.value = item.color || (state.isDarkMode ? '#ffffff' : '#1f2937');
-            
+            DOM.editItemId.value = item.id; DOM.itemFormTitle.innerText = '編輯品項設定'; DOM.submitItemFormBtn.innerText = '儲存修改';
+            DOM.formItemCategory.innerHTML = state.categories.map(cat => `<option value="${cat}">${cat}</option>`).join('');
+            DOM.formItemName.value = item.name; DOM.formItemCategory.value = item.category; DOM.formItemColor.value = item.color || (state.isDarkMode ? '#ffffff' : '#1f2937');
             DOM.itemFormModal.showModal();
         };
 
-        // 清空當前品項盤點歷史
         window.appClearCurrentHistory = function() {
             if (!state.currentHistoryItemId) return;
             if (confirm('確定要清空此品項的「所有盤點歷史紀錄」嗎？\n(注意：此動作無法復原，但不影響當前總庫存數字)')) {
                 state.history = state.history.filter(h => h.itemId !== state.currentHistoryItemId);
-                LocalDB.save();
-                showToast('盤點紀錄已清空');
-                DOM.historyModal.close();
+                CloudDB.save(); showToast('盤點紀錄已清空'); DOM.historyModal.close();
             }
         };
 
-        // 查看歷史紀錄 (全域綁定)
         window.appViewHistory = function(itemId, itemName) {
             state.currentHistoryItemId = itemId;
             DOM.historyItemName.innerText = itemName;
-            
-            // 篩選出該品項的歷史並按時間倒序
             const itemHistory = state.history.filter(h => h.itemId === itemId).sort((a, b) => b.timestampMs - a.timestampMs);
-            
             if (itemHistory.length === 0) {
-                DOM.clearHistoryBtn.classList.add('hidden'); // 無紀錄時隱藏清空按鈕
-                DOM.historyListContainer.innerHTML = `
-                    <div class="text-center py-10 text-gray-400">
-                        <i class="fa-solid fa-folder-open text-4xl mb-2"></i>
-                        <p>尚無盤點修改紀錄</p>
-                    </div>`;
+                DOM.clearHistoryBtn.classList.add('hidden');
+                DOM.historyListContainer.innerHTML = `<div class="text-center py-10 text-gray-400"><i class="fa-solid fa-folder-open text-4xl mb-2"></i><p>尚無盤點修改紀錄</p></div>`;
             } else {
-                DOM.clearHistoryBtn.classList.remove('hidden'); // 有紀錄時顯示清空按鈕
+                DOM.clearHistoryBtn.classList.remove('hidden');
                 DOM.historyListContainer.innerHTML = itemHistory.map(record => {
                     const diffText = record.diff > 0 ? `+${record.diff}` : record.diff;
                     const diffColor = record.diff > 0 ? 'text-green-500' : (record.diff < 0 ? 'text-red-500' : 'text-gray-500');
                     const locationText = record.location === 'front' ? '前台' : '倉庫';
-                    
                     return `
                     <li class="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <div class="flex items-center gap-3">
-                            <div class="bg-gray-100 dark:bg-gray-700 p-2 rounded-lg text-gray-500 dark:text-gray-400">
-                                <i class="fa-solid fa-boxes-packing"></i>
-                            </div>
-                            <div>
-                                <p class="text-sm font-bold text-gray-800 dark:text-gray-200">更新了 ${locationText} 數量</p>
-                                <p class="text-xs text-gray-500 dark:text-gray-400">${record.timestamp}</p>
-                            </div>
+                            <div class="bg-gray-100 dark:bg-gray-700 p-2 rounded-lg text-gray-500 dark:text-gray-400"><i class="fa-solid fa-boxes-packing"></i></div>
+                            <div><p class="text-sm font-bold text-gray-800 dark:text-gray-200">更新了 ${locationText} 數量</p><p class="text-xs text-gray-500 dark:text-gray-400">${record.timestamp}</p></div>
                         </div>
                         <div class="flex items-center gap-4 bg-gray-50 dark:bg-gray-900/50 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 shrink-0">
-                            <div class="text-sm text-gray-600 dark:text-gray-300">
-                                ${record.oldQty} <i class="fa-solid fa-arrow-right text-gray-400 text-xs mx-1"></i> ${record.newQty}
-                            </div>
-                            <div class="text-sm font-bold ${diffColor} w-16 text-right">
-                                ${record.diff < 0 ? '使用 ' : '新增 '}${diffText}
-                            </div>
+                            <div class="text-sm text-gray-600 dark:text-gray-300">${record.oldQty} <i class="fa-solid fa-arrow-right text-gray-400 text-xs mx-1"></i> ${record.newQty}</div>
+                            <div class="text-sm font-bold ${diffColor} w-16 text-right">${record.diff < 0 ? '使用 ' : '新增 '}${diffText}</div>
                         </div>
-                    </li>
-                    `;
+                    </li>`;
                 }).join('');
             }
-            
             DOM.historyModal.showModal();
         }
 
-        // 刪除分類 (全域綁定)
         window.appDeleteCategory = function(catToDelete) {
             if (confirm(`確定要刪除「${catToDelete}」分類嗎？\n(注意：現有品項不會被刪除，但可能需要重新分類)`)) {
                 state.categories = state.categories.filter(cat => cat !== catToDelete);
-                LocalDB.saveCategories();
-                
-                if (state.activeTab === catToDelete) {
-                    state.activeTab = '全部';
-                }
-                
-                renderCategoryManager();
-                renderTabs();
-                renderItems();
-                showToast('分類已刪除');
+                CloudDB.saveCategories();
+                if (state.activeTab === catToDelete) state.activeTab = '全部';
+                renderCategoryManager(); renderTabs(); renderItems(); showToast('分類已刪除');
             }
         };
 
-        // 渲染分類管理器列表
-        function renderCategoryManager() {
-            DOM.categoryListContainer.innerHTML = state.categories.map(cat => `
-                <li class="flex justify-between items-center bg-gray-50 dark:bg-gray-700/50 px-3 py-2 rounded border border-gray-100 dark:border-gray-600">
-                    <span class="text-sm font-medium text-gray-700 dark:text-gray-200">${cat}</span>
-                    <div class="flex items-center gap-1">
-                        <button onclick="window.appEditCategory('${cat}')" class="text-blue-500 hover:text-blue-700 transition-colors p-2 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30" title="編輯">
-                            <i class="fa-solid fa-pen"></i>
-                        </button>
-                        <button onclick="window.appDeleteCategory('${cat}')" class="text-red-500 hover:text-red-700 transition-colors p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30" title="刪除">
-                            <i class="fa-solid fa-trash-can"></i>
-                        </button>
-                    </div>
-                </li>
-            `).join('');
-        }
-
-        // 開啟分類管理面板
-        window.appOpenCategoryManager = function() {
-            renderCategoryManager();
-            DOM.categoryManageModal.showModal();
-        }
-
-        // 設定角色狀態並更新UI
-        function setRole(role) {
-            state.role = role;
-            DOM.roleSelector.value = role;
-            
-            if (role === 'admin') {
-                DOM.roleIcon.className = "fa-solid fa-user-tie";
-                DOM.itemsGrid.classList.add('hidden');
-                DOM.adminTableView.classList.remove('hidden');
-                DOM.changePwdBtn.classList.remove('hidden');
-            } else {
-                DOM.roleIcon.className = "fa-solid fa-user";
-                DOM.itemsGrid.classList.remove('hidden');
-                DOM.adminTableView.classList.add('hidden');
-                DOM.changePwdBtn.classList.add('hidden');
-            }
-            renderUI();
-        }
-
-        // 渲染分類標籤
-        function renderTabs() {
-            const tabsHTML = ['全部', ...state.categories].map(cat => {
-                const isAll = cat === '全部';
-                // 產生拖曳相關的屬性
-                const dragAttrs = !isAll ? `draggable="true" ondragstart="window.appDragStart(event, '${cat}')" ondragend="window.appDragEnd(event)" ondragover="window.appDragOver(event)" ondragenter="window.appDragEnter(event)" ondragleave="window.appDragLeave(event)" ondrop="window.appDrop(event, '${cat}')"` : '';
-                const cursorClass = !isAll ? 'cursor-move' : 'cursor-pointer';
-
-                return `
-                <button ${dragAttrs} onclick="window.appChangeTab('${cat}')" 
-                        class="px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-colors ${cursorClass} select-none
-                        ${state.activeTab === cat 
-                            ? 'bg-blue-600 text-white shadow-md' 
-                            : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
-                        }">
-                    ${cat}
-                </button>
-                `;
-            }).join('');
-            
-            // 如果是管理員，在最後加上管理分類按鈕
-            const manageBtnHTML = state.role === 'admin' ? `
-                <button onclick="window.appOpenCategoryManager()" class="px-3 py-2 rounded-full whitespace-nowrap text-sm font-bold bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors ml-2 shadow-sm border border-transparent shrink-0">
-                    <i class="fa-solid fa-gear"></i> 管理分類
-                </button>
-            ` : '';
-
-            DOM.categoryTabs.innerHTML = tabsHTML + manageBtnHTML;
-        }
-
-        window.appChangeTab = function(category) {
-            state.activeTab = category;
-            renderTabs();
-            renderItems();
-        }
-
-        // 渲染品項列表
-        function renderItems() {
-            let filteredItems = state.items;
-
-            if (state.activeTab !== '全部') {
-                filteredItems = filteredItems.filter(item => item.category === state.activeTab);
-            }
-            if (state.searchQuery) {
-                filteredItems = filteredItems.filter(item => item.name.toLowerCase().includes(state.searchQuery));
-            }
-
-            // 取消字母強制排序，讓使用者在管理頁面拖曳的陣列原始順序(state.items)得以保留生效。
-            // filteredItems 將直接反映 state.items 經過過濾後的順序
-
-            if (filteredItems.length === 0) {
-                DOM.itemsGrid.innerHTML = '';
-                DOM.adminTableBody.innerHTML = '';
-                DOM.emptyState.classList.remove('hidden');
-                DOM.emptyState.classList.add('flex');
-                DOM.adminTableView.classList.add('hidden');
-                return;
-            }
-
-            DOM.emptyState.classList.add('hidden');
-            DOM.emptyState.classList.remove('flex');
-
-            if (state.role === 'admin') {
-                DOM.adminTableView.classList.remove('hidden');
-                renderAdminTable(filteredItems);
-            } else {
-                renderStaffGrid(filteredItems);
-            }
-        }
-
-        // 渲染：盤點員直式列表視圖
-        function renderStaffGrid(items) {
-            DOM.itemsGrid.innerHTML = items.map(item => {
-                const hasFrontCount = state.counts.hasOwnProperty(`${item.id}_front`);
-                const hasWarehouseCount = state.counts.hasOwnProperty(`${item.id}_warehouse`);
-                
-                const frontQty = hasFrontCount ? state.counts[`${item.id}_front`] : 0;
-                const warehouseQty = hasWarehouseCount ? state.counts[`${item.id}_warehouse`] : 0;
-                
-                // 若未設定顏色，使用預設顏色
-                const nameColor = item.color || (state.isDarkMode ? '#ffffff' : '#1f2937');
-
-                return `
-                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-3 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                    
-                    <!-- 左側：品項資訊 -->
-                    <div class="flex items-center gap-3 w-full md:w-auto">
-                        <span class="text-xs font-semibold px-2 py-1 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 whitespace-nowrap border border-blue-100 dark:border-blue-800/50">
-                            ${item.category}
-                        </span>
-                        <!-- 字體放大為 text-lg sm:text-xl -->
-                        <h3 class="font-bold text-lg sm:text-xl truncate" style="color: ${nameColor}">${item.name}</h3>
-                    </div>
-                    
-                    <!-- 右側：輸入與微調區 -->
-                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
-                        
-                        <!-- 前台輸入組 -->
-                        <div class="flex items-center justify-between sm:justify-start gap-2 bg-gray-50 dark:bg-gray-900/50 p-1.5 rounded-lg border border-gray-100 dark:border-gray-700">
-                            <label class="text-xs font-medium text-gray-500 dark:text-gray-400 pl-1 w-8 shrink-0">前台</label>
-                            
-                            <div class="flex items-center rounded-md border border-gray-200 dark:border-gray-600 overflow-hidden shrink-0">
-                                <button onclick="window.appAdjustCount('${item.id}', 'front', -1)" class="w-8 h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">-</button>
-                                <input type="number" min="0" value="${frontQty}" id="input_front_${item.id}" 
-                                    class="w-12 h-8 text-center border-0 focus:ring-0 p-0 text-sm font-bold bg-white dark:bg-gray-700 dark:text-white hide-arrows">
-                                <button onclick="window.appAdjustCount('${item.id}', 'front', 1)" class="w-8 h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">+</button>
-                            </div>
-                            
-                            <button id="btn_front_${item.id}" onclick="window.appSaveCount('${item.id}', 'front')" 
-                                class="${hasFrontCount ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400'} 
-                                w-14 h-8 rounded-md hover:opacity-80 transition-colors text-xs font-bold whitespace-nowrap shrink-0">
-                                ${hasFrontCount ? '更新' : '儲存'}
-                            </button>
-                        </div>
-
-                        <!-- 倉庫輸入組 -->
-                        <div class="flex items-center justify-between sm:justify-start gap-2 bg-gray-50 dark:bg-gray-900/50 p-1.5 rounded-lg border border-gray-100 dark:border-gray-700">
-                            <label class="text-xs font-medium text-gray-500 dark:text-gray-400 pl-1 w-8 shrink-0">倉庫</label>
-                            
-                            <div class="flex items-center rounded-md border border-gray-200 dark:border-gray-600 overflow-hidden shrink-0">
-                                <button onclick="window.appAdjustCount('${item.id}', 'warehouse', -1)" class="w-8 h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">-</button>
-                                <input type="number" min="0" value="${warehouseQty}" id="input_warehouse_${item.id}" 
-                                    class="w-12 h-8 text-center border-0 focus:ring-0 p-0 text-sm font-bold bg-white dark:bg-gray-700 dark:text-white hide-arrows">
-                                <button onclick="window.appAdjustCount('${item.id}', 'warehouse', 1)" class="w-8 h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">+</button>
-                            </div>
-
-                            <button id="btn_warehouse_${item.id}" onclick="window.appSaveCount('${item.id}', 'warehouse')" 
-                                class="${hasWarehouseCount ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400'} 
-                                w-14 h-8 rounded-md hover:opacity-80 transition-colors text-xs font-bold whitespace-nowrap shrink-0">
-                                ${hasWarehouseCount ? '更新' : '儲存'}
-                            </button>
-                        </div>
-                        
-                    </div>
-                </div>
-                `;
-            }).join('');
-        }
-
-        // 渲染：管理員表格視圖 (新增拖曳排序支援與訂購數量)
-        function renderAdminTable(items) {
-            DOM.adminTableBody.innerHTML = items.map(item => {
-                const frontQty = state.counts[`${item.id}_front`] || 0;
-                const warehouseQty = state.counts[`${item.id}_warehouse`] || 0;
-                const totalQty = frontQty + warehouseQty;
-                const orderQty = state.orderCounts[item.id] !== undefined ? state.orderCounts[item.id] : '';
-                
-                const nameColor = item.color || (state.isDarkMode ? '#ffffff' : '#1f2937');
-
-                return `
-                <tr data-id="${item.id}" draggable="true" 
-                    ondragstart="window.appItemDragStart(event, '${item.id}')"
-                    ondragend="window.appItemDragEnd(event)"
-                    ondragover="window.appItemDragOver(event)"
-                    ondragenter="window.appItemDragEnter(event)"
-                    ondragleave="window.appItemDragLeave(event)"
-                    ondrop="window.appItemDrop(event, '${item.id}')"
-                    class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-move">
-                    
-                    <td class="px-6 py-4 whitespace-nowrap text-gray-400 dark:text-gray-500">
-                        <i class="fa-solid fa-grip-vertical"></i>
-                    </td>
-                    <!-- 分類移至品項名稱前面 -->
-                    <td class="px-6 py-4 whitespace-nowrap pointer-events-none w-24">
-                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400">
-                            ${item.category}
-                        </span>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap pointer-events-none">
-                        <!-- 字體放大為 text-base sm:text-lg -->
-                        <div class="text-base sm:text-lg font-bold" style="color: ${nameColor}">${item.name}</div>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-700 dark:text-gray-300 pointer-events-none">
-                        ${frontQty}
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-700 dark:text-gray-300 pointer-events-none">
-                        ${warehouseQty}
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-center pointer-events-none">
-                        <div class="text-sm font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 py-1 rounded">${totalQty}</div>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-center">
-                        <input type="number" min="0" value="${orderQty}" placeholder="-" 
-                            onchange="window.appSaveOrderCount('${item.id}', this.value)"
-                            onmousedown="event.stopPropagation()"
-                            class="w-16 h-8 text-center border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-indigo-500 outline-none font-bold bg-white dark:bg-gray-700 dark:text-white hide-arrows text-indigo-700 dark:text-indigo-400">
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div class="flex items-center justify-end gap-2">
-                            <button onclick="window.appViewHistory('${item.id}', '${item.name}')" class="text-indigo-500 hover:text-indigo-700 transition-colors p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/40" title="盤點紀錄">
-                                <i class="fa-solid fa-clock-rotate-left"></i>
-                            </button>
-                            <button onclick="window.appEditItem('${item.id}')" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors p-2 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600" title="編輯品項">
-                                <i class="fa-solid fa-pen-to-square"></i>
-                            </button>
-                            <button onclick="window.appDeleteItem('${item.id}', '${item.name}')" class="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors p-2 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40" title="刪除">
-                                <i class="fa-solid fa-trash-can"></i>
-                            </button>
-                        </div>
-                    </td>
-                </tr>
-                `;
-            }).join('');
-        }
-
-        // 全域函數：加減微調按鈕
+        window.appOpenCategoryManager = function() { renderCategoryManager(); DOM.categoryManageModal.showModal(); }
+        window.appChangeTab = function(category) { state.activeTab = category; renderTabs(); renderItems(); }
+        
         window.appAdjustCount = function(itemId, location, delta) {
             const inputEl = document.getElementById(`input_${location}_${itemId}`);
             if (!inputEl) return;
-            
-            let currentVal = parseInt(inputEl.value);
-            if (isNaN(currentVal)) currentVal = 0;
-            
-            let newVal = currentVal + delta;
-            if (newVal < 0) newVal = 0;
-            
+            let currentVal = parseInt(inputEl.value); if (isNaN(currentVal)) currentVal = 0;
+            let newVal = currentVal + delta; if (newVal < 0) newVal = 0;
             inputEl.value = newVal;
         };
 
-        // 全域函數：儲存盤點數量 (含差異計算與紀錄)
         window.appSaveCount = function(itemId, location) {
             const inputEl = document.getElementById(`input_${location}_${itemId}`);
             const btnEl = document.getElementById(`btn_${location}_${itemId}`);
             if (!inputEl || !btnEl) return;
-            
             const newQty = parseInt(inputEl.value);
-            if (isNaN(newQty) || newQty < 0) {
-                showToast('請輸入有效的正整數', true);
-                return;
-            }
+            if (isNaN(newQty) || newQty < 0) { showToast('請輸入有效的正整數', true); return; }
 
             const countKey = `${itemId}_${location}`;
             const oldQty = state.counts[countKey] || 0;
-            
-            // 計算差異並記錄歷史 (只有當數字有變化時才記錄)
             if (oldQty !== newQty) {
-                const diff = newQty - oldQty;
                 state.history.push({
-                    id: Date.now().toString(),
-                    itemId: itemId,
-                    location: location,
-                    oldQty: oldQty,
-                    newQty: newQty,
-                    diff: diff,
-                    timestamp: getFormattedDate(),
-                    timestampMs: Date.now()
+                    id: Date.now().toString(), itemId: itemId, location: location,
+                    oldQty: oldQty, newQty: newQty, diff: newQty - oldQty,
+                    timestamp: getFormattedDate(), timestampMs: Date.now()
                 });
             }
 
-            // 停用按鈕顯示回饋
             btnEl.innerHTML = '<i class="fa-solid fa-check"></i>';
             btnEl.className = 'bg-green-500 text-white dark:bg-green-600 w-14 h-8 rounded-md flex items-center justify-center transition-colors text-xs font-bold whitespace-nowrap shrink-0';
-            
-            // 寫入資料
             state.counts[countKey] = newQty;
-            LocalDB.save();
-            showToast('數量已儲存');
-            
-            // 恢復按鈕狀態
+            CloudDB.save(); showToast('數量已同步儲存');
             setTimeout(() => {
                 btnEl.innerText = '更新';
                 btnEl.className = 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400 w-14 h-8 rounded-md hover:opacity-80 transition-colors text-xs font-bold whitespace-nowrap shrink-0';
             }, 1000);
         }
 
-        // 全域函數：儲存訂購數量
         window.appSaveOrderCount = function(itemId, val) {
             const qty = parseInt(val);
-            if (isNaN(qty) || qty <= 0) {
-                delete state.orderCounts[itemId];
-            } else {
-                state.orderCounts[itemId] = qty;
-            }
-            LocalDB.save();
+            if (isNaN(qty) || qty <= 0) { delete state.orderCounts[itemId]; } else { state.orderCounts[itemId] = qty; }
+            CloudDB.save();
         };
 
-        // 全域函數：匯出真正的 Excel 訂購單 (使用 ExcelJS)
         window.appExportOrder = async function() {
             const orderItems = state.items.filter(item => state.orderCounts[item.id] > 0);
-            
-            if (orderItems.length === 0) {
-                showToast('目前沒有填寫任何大於0的訂購數量', true);
-                return;
-            }
+            if (orderItems.length === 0) { showToast('目前沒有填寫任何大於0的訂購數量', true); return; }
             
             try {
                 showToast('正在產生 Excel 檔案...');
-
-                // 建立新的 Excel 活頁簿與工作表
                 const workbook = new ExcelJS.Workbook();
                 const worksheet = workbook.addWorksheet('訂購單');
-                
-                // 設定欄位與對齊方式 (鎖定排版：品項靠左、數量置中)
                 worksheet.columns = [
                     { header: '品項名稱', key: 'name', width: 40, style: { alignment: { horizontal: 'left', vertical: 'middle' } } },
                     { header: '訂購數量', key: 'qty', width: 15, style: { alignment: { horizontal: 'center', vertical: 'middle' } } }
                 ];
-                
-                // 設定標題列樣式 (粗體、置中、灰色背景)
                 const headerRow = worksheet.getRow(1);
-                headerRow.font = { bold: true, size: 12 };
-                headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
-                headerRow.fill = {
-                    type: 'pattern',
-                    pattern: 'solid',
-                    fgColor: { argb: 'FFF3F4F6' }
-                };
-                
-                // 寫入資料
-                orderItems.forEach(item => {
-                    worksheet.addRow({
-                        name: item.name,
-                        qty: state.orderCounts[item.id]
-                    });
-                });
-
-                // 為所有有資料的儲存格加上框線
+                headerRow.font = { bold: true, size: 12 }; headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+                headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+                orderItems.forEach(item => { worksheet.addRow({ name: item.name, qty: state.orderCounts[item.id] }); });
                 worksheet.eachRow({ includeEmpty: false }, function(row, rowNumber) {
                     row.eachCell({ includeEmpty: false }, function(cell, colNumber) {
-                        cell.border = {
-                            top: {style:'thin'},
-                            left: {style:'thin'},
-                            bottom: {style:'thin'},
-                            right: {style:'thin'}
-                        };
+                        cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
                     });
                 });
-                
-                // 產生檔案並觸發下載
                 const buffer = await workbook.xlsx.writeBuffer();
                 const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement("a");
-                
-                link.setAttribute("href", url);
-                link.setAttribute("download", `庫存訂購單_${getFormattedDate().replace(/[-: ]/g, '')}.xlsx`);
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                
+                link.setAttribute("href", url); link.setAttribute("download", `庫存訂購單_${getFormattedDate().replace(/[-: ]/g, '')}.xlsx`);
+                document.body.appendChild(link); link.click(); document.body.removeChild(link);
                 showToast('Excel 訂購單已成功匯出');
-                
-                // 匯出後詢問是否清空數量
                 setTimeout(() => {
                     if (confirm('匯出成功！是否要「清空」目前的訂購數量，以便準備下次填寫？')) {
-                        state.orderCounts = {};
-                        LocalDB.save();
-                        renderItems();
+                        state.orderCounts = {}; CloudDB.save(); renderItems();
                     }
                 }, 500);
-
-            } catch (error) {
-                console.error("Excel匯出錯誤:", error);
-                showToast('匯出失敗，請稍後再試', true);
-            }
+            } catch (error) { showToast('匯出失敗，請稍後再試', true); }
         };
 
-        // 全域函數：觸發刪除流程
         window.appDeleteItem = function(itemId, itemName) {
-            state.itemToDelete = itemId;
-            DOM.deleteItemNameText.innerText = itemName;
-            DOM.deleteConfirmModal.showModal();
+            state.itemToDelete = itemId; DOM.deleteItemNameText.innerText = itemName; DOM.deleteConfirmModal.showModal();
         }
 
-        // 更新整個畫面 UI
+        // ================= UI 渲染函數 =================
+        function renderCategoryManager() {
+            DOM.categoryListContainer.innerHTML = state.categories.map(cat => `
+                <li class="flex justify-between items-center bg-gray-50 dark:bg-gray-700/50 px-3 py-2 rounded border border-gray-100 dark:border-gray-600">
+                    <span class="text-sm font-medium text-gray-700 dark:text-gray-200">${cat}</span>
+                    <div class="flex items-center gap-1">
+                        <button onclick="window.appEditCategory('${cat}')" class="text-blue-500 hover:text-blue-700 transition-colors p-2 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30" title="編輯"><i class="fa-solid fa-pen"></i></button>
+                        <button onclick="window.appDeleteCategory('${cat}')" class="text-red-500 hover:text-red-700 transition-colors p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30" title="刪除"><i class="fa-solid fa-trash-can"></i></button>
+                    </div>
+                </li>
+            `).join('');
+        }
+
+        function setRole(role) {
+            state.role = role; DOM.roleSelector.value = role;
+            if (role === 'admin') {
+                DOM.roleIcon.className = "fa-solid fa-user-tie"; DOM.itemsGrid.classList.add('hidden');
+                DOM.adminTableView.classList.remove('hidden'); DOM.changePwdBtn.classList.remove('hidden');
+            } else {
+                DOM.roleIcon.className = "fa-solid fa-user"; DOM.itemsGrid.classList.remove('hidden');
+                DOM.adminTableView.classList.add('hidden'); DOM.changePwdBtn.classList.add('hidden');
+            }
+            renderUI();
+        }
+
+        function renderTabs() {
+            const tabsHTML = ['全部', ...state.categories].map(cat => {
+                const isAll = cat === '全部';
+                const dragAttrs = !isAll ? `draggable="true" ondragstart="window.appDragStart(event, '${cat}')" ondragend="window.appDragEnd(event)" ondragover="window.appDragOver(event)" ondragenter="window.appDragEnter(event)" ondragleave="window.appDragLeave(event)" ondrop="window.appDrop(event, '${cat}')"` : '';
+                const cursorClass = !isAll ? 'cursor-move' : 'cursor-pointer';
+                return `
+                <button ${dragAttrs} onclick="window.appChangeTab('${cat}')" 
+                        class="px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-colors ${cursorClass} select-none
+                        ${state.activeTab === cat ? 'bg-blue-600 text-white shadow-md' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'}">
+                    ${cat}
+                </button>`;
+            }).join('');
+            const manageBtnHTML = state.role === 'admin' ? `<button onclick="window.appOpenCategoryManager()" class="px-3 py-2 rounded-full whitespace-nowrap text-sm font-bold bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors ml-2 shadow-sm border border-transparent shrink-0"><i class="fa-solid fa-gear"></i> 管理分類</button>` : '';
+            DOM.categoryTabs.innerHTML = tabsHTML + manageBtnHTML;
+        }
+
+        function renderItems() {
+            let filteredItems = state.items;
+            if (state.activeTab !== '全部') filteredItems = filteredItems.filter(item => item.category === state.activeTab);
+            if (state.searchQuery) filteredItems = filteredItems.filter(item => item.name.toLowerCase().includes(state.searchQuery));
+
+            if (filteredItems.length === 0) {
+                DOM.itemsGrid.innerHTML = ''; DOM.adminTableBody.innerHTML = '';
+                DOM.emptyState.classList.remove('hidden'); DOM.emptyState.classList.add('flex');
+                DOM.adminTableView.classList.add('hidden'); return;
+            }
+
+            DOM.emptyState.classList.add('hidden'); DOM.emptyState.classList.remove('flex');
+            if (state.role === 'admin') { DOM.adminTableView.classList.remove('hidden'); renderAdminTable(filteredItems); } 
+            else { renderStaffGrid(filteredItems); }
+        }
+
+        function renderStaffGrid(items) {
+            DOM.itemsGrid.innerHTML = items.map(item => {
+                const hasFrontCount = state.counts.hasOwnProperty(`${item.id}_front`);
+                const hasWarehouseCount = state.counts.hasOwnProperty(`${item.id}_warehouse`);
+                const frontQty = hasFrontCount ? state.counts[`${item.id}_front`] : 0;
+                const warehouseQty = hasWarehouseCount ? state.counts[`${item.id}_warehouse`] : 0;
+                const nameColor = item.color || (state.isDarkMode ? '#ffffff' : '#1f2937');
+
+                return `
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-3 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                    <div class="flex items-center gap-3 w-full md:w-auto">
+                        <span class="text-xs font-semibold px-2 py-1 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 whitespace-nowrap border border-blue-100 dark:border-blue-800/50">${item.category}</span>
+                        <h3 class="font-bold text-lg sm:text-xl truncate" style="color: ${nameColor}">${item.name}</h3>
+                    </div>
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
+                        <div class="flex items-center justify-between sm:justify-start gap-2 bg-gray-50 dark:bg-gray-900/50 p-1.5 rounded-lg border border-gray-100 dark:border-gray-700">
+                            <label class="text-xs font-medium text-gray-500 dark:text-gray-400 pl-1 w-8 shrink-0">前台</label>
+                            <div class="flex items-center rounded-md border border-gray-200 dark:border-gray-600 overflow-hidden shrink-0">
+                                <button onclick="window.appAdjustCount('${item.id}', 'front', -1)" class="w-8 h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">-</button>
+                                <input type="number" min="0" value="${frontQty}" id="input_front_${item.id}" class="w-12 h-8 text-center border-0 focus:ring-0 p-0 text-sm font-bold bg-white dark:bg-gray-700 dark:text-white hide-arrows">
+                                <button onclick="window.appAdjustCount('${item.id}', 'front', 1)" class="w-8 h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">+</button>
+                            </div>
+                            <button id="btn_front_${item.id}" onclick="window.appSaveCount('${item.id}', 'front')" class="${hasFrontCount ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400'} w-14 h-8 rounded-md hover:opacity-80 transition-colors text-xs font-bold whitespace-nowrap shrink-0">${hasFrontCount ? '更新' : '儲存'}</button>
+                        </div>
+                        <div class="flex items-center justify-between sm:justify-start gap-2 bg-gray-50 dark:bg-gray-900/50 p-1.5 rounded-lg border border-gray-100 dark:border-gray-700">
+                            <label class="text-xs font-medium text-gray-500 dark:text-gray-400 pl-1 w-8 shrink-0">倉庫</label>
+                            <div class="flex items-center rounded-md border border-gray-200 dark:border-gray-600 overflow-hidden shrink-0">
+                                <button onclick="window.appAdjustCount('${item.id}', 'warehouse', -1)" class="w-8 h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">-</button>
+                                <input type="number" min="0" value="${warehouseQty}" id="input_warehouse_${item.id}" class="w-12 h-8 text-center border-0 focus:ring-0 p-0 text-sm font-bold bg-white dark:bg-gray-700 dark:text-white hide-arrows">
+                                <button onclick="window.appAdjustCount('${item.id}', 'warehouse', 1)" class="w-8 h-8 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-center font-bold">+</button>
+                            </div>
+                            <button id="btn_warehouse_${item.id}" onclick="window.appSaveCount('${item.id}', 'warehouse')" class="${hasWarehouseCount ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400'} w-14 h-8 rounded-md hover:opacity-80 transition-colors text-xs font-bold whitespace-nowrap shrink-0">${hasWarehouseCount ? '更新' : '儲存'}</button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function renderAdminTable(items) {
+            DOM.adminTableBody.innerHTML = items.map(item => {
+                const frontQty = state.counts[`${item.id}_front`] || 0;
+                const warehouseQty = state.counts[`${item.id}_warehouse`] || 0;
+                const totalQty = frontQty + warehouseQty;
+                const orderQty = state.orderCounts[item.id] !== undefined ? state.orderCounts[item.id] : '';
+                const nameColor = item.color || (state.isDarkMode ? '#ffffff' : '#1f2937');
+
+                return `
+                <tr data-id="${item.id}" draggable="true" ondragstart="window.appItemDragStart(event, '${item.id}')" ondragend="window.appItemDragEnd(event)" ondragover="window.appItemDragOver(event)" ondragenter="window.appItemDragEnter(event)" ondragleave="window.appItemDragLeave(event)" ondrop="window.appItemDrop(event, '${item.id}')" class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-move">
+                    <td class="px-6 py-4 whitespace-nowrap text-gray-400 dark:text-gray-500"><i class="fa-solid fa-grip-vertical"></i></td>
+                    <td class="px-6 py-4 whitespace-nowrap pointer-events-none w-24"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400">${item.category}</span></td>
+                    <td class="px-6 py-4 whitespace-nowrap pointer-events-none"><div class="text-base sm:text-lg font-bold" style="color: ${nameColor}">${item.name}</div></td>
+                    <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-700 dark:text-gray-300 pointer-events-none">${frontQty}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-700 dark:text-gray-300 pointer-events-none">${warehouseQty}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-center pointer-events-none"><div class="text-sm font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 py-1 rounded">${totalQty}</div></td>
+                    <td class="px-6 py-4 whitespace-nowrap text-center"><input type="number" min="0" value="${orderQty}" placeholder="-" onchange="window.appSaveOrderCount('${item.id}', this.value)" onmousedown="event.stopPropagation()" class="w-16 h-8 text-center border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-indigo-500 outline-none font-bold bg-white dark:bg-gray-700 dark:text-white hide-arrows text-indigo-700 dark:text-indigo-400"></td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div class="flex items-center justify-end gap-2">
+                            <button onclick="window.appViewHistory('${item.id}', '${item.name}')" class="text-indigo-500 hover:text-indigo-700 transition-colors p-2 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/40" title="盤點紀錄"><i class="fa-solid fa-clock-rotate-left"></i></button>
+                            <button onclick="window.appEditItem('${item.id}')" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors p-2 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600" title="編輯品項"><i class="fa-solid fa-pen-to-square"></i></button>
+                            <button onclick="window.appDeleteItem('${item.id}', '${item.name}')" class="text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors p-2 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40" title="刪除"><i class="fa-solid fa-trash-can"></i></button>
+                        </div>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
         function renderUI() {
             renderTabs();
             renderItems();
             DOM.fabAddBtn.classList.remove('hidden');
         }
 
-        // 初始化與啟動
+        // ================= 應用啟動 =================
         function initApp() {
-            setupEventListeners();
-            LocalDB.load();
-            
-            setTimeout(() => {
+            if (!db) return; // 這裡不處理沒有 db 的情況，因為強制輸入密碼且 db 在上面已實例化
+
+            // 監聽雲端資料庫變化 (實現多人即時同步)
+            const docRef = doc(db, "inventory", "main_state");
+            onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    state.items = data.items || [];
+                    state.counts = data.counts || {};
+                    state.orderCounts = data.orderCounts || {};
+                    state.history = data.history || [];
+                    state.categories = data.categories || ['飲品', '食品', '耗材', '包裝', '其他'];
+                } else {
+                    CloudDB.save();
+                }
+
+                // 深色模式設定只保留在本地設備
+                const storedDarkMode = localStorage.getItem('inv_darkmode');
+                if (storedDarkMode !== null) {
+                    state.isDarkMode = storedDarkMode === 'true';
+                } else {
+                    state.isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                }
+                applyDarkMode();
+
+                renderUI();
+
                 DOM.loadingState.classList.add('hidden');
                 DOM.appContent.classList.remove('hidden');
-                setRole('staff');
-            }, 500);
+                
+                if (!window.hasInitialized) {
+                    setRole('staff');
+                    window.hasInitialized = true;
+                }
+            }, (error) => {
+                console.error("Firestore 連線錯誤:", error);
+                DOM.loadingState.innerHTML = `<p class="text-red-500 mt-4">資料庫連線失敗: ${error.message}<br>請確認 Firebase 的「資料庫規則 (Rules)」是否設定為允許讀寫。</p>`;
+            });
         }
 
-        initApp();
+        // ================= 應用啟動檢查 (首次密碼驗證) =================
+        function checkSiteAccess() {
+            setupEventListeners(); 
+            
+            if (localStorage.getItem('site_access_granted') === 'true') {
+                initApp();
+            } else {
+                DOM.loadingState.classList.add('hidden');
+                DOM.siteLoginModal.showModal();
+            }
+        }
+
+        checkSiteAccess();
 
     </script>
 </body>
